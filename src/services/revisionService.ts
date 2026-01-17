@@ -159,9 +159,9 @@ export async function obtenerRevisionesPendientesFirma(custodioId: string): Prom
             .filter(r => r.custodioId === custodioId && r.estado === 'pendiente_firma_custodio')
             .sort((a, b) => {
                 const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? a.fecha.seconds : 0;
+                    ? (a.fecha as { seconds: number }).seconds : 0;
                 const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? b.fecha.seconds : 0;
+                    ? (b.fecha as { seconds: number }).seconds : 0;
                 return fechaB - fechaA;
             });
 
@@ -181,9 +181,9 @@ export async function obtenerRevisionesPorRevisor(revisorId: string): Promise<Re
             .filter(r => r.revisorId === revisorId)
             .sort((a, b) => {
                 const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? a.fecha.seconds : 0;
+                    ? (a.fecha as { seconds: number }).seconds : 0;
                 const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? b.fecha.seconds : 0;
+                    ? (b.fecha as { seconds: number }).seconds : 0;
                 return fechaB - fechaA;
             });
 
@@ -210,9 +210,9 @@ export async function obtenerRevisionesPorActivo(activoId: string): Promise<Revi
             .filter(r => r.activoId === activoId)
             .sort((a, b) => {
                 const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? a.fecha.seconds : 0;
+                    ? (a.fecha as { seconds: number }).seconds : 0;
                 const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? b.fecha.seconds : 0;
+                    ? (b.fecha as { seconds: number }).seconds : 0;
                 return fechaB - fechaA;
             });
 
@@ -270,9 +270,9 @@ export async function obtenerRevisionesRecientes(limite: number = 5): Promise<Re
             .filter(r => r.estado === 'completada')
             .sort((a, b) => {
                 const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? a.fecha.seconds : 0;
+                    ? (a.fecha as { seconds: number }).seconds : 0;
                 const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? b.fecha.seconds : 0;
+                    ? (b.fecha as { seconds: number }).seconds : 0;
                 return fechaB - fechaA;
             })
             .slice(0, limite);
@@ -294,9 +294,9 @@ export async function obtenerTodasPendientesFirma(): Promise<Revision[]> {
             .filter(r => r.estado === 'pendiente_firma_custodio')
             .sort((a, b) => {
                 const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? a.fecha.seconds : 0;
+                    ? (a.fecha as { seconds: number }).seconds : 0;
                 const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? b.fecha.seconds : 0;
+                    ? (b.fecha as { seconds: number }).seconds : 0;
                 return fechaB - fechaA;
             });
 
