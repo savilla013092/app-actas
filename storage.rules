@@ -1,0 +1,61 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // EVIDENCIAS: Imágenes de revisiones
+    // ══════════════════════════════════════════════════════════════
+
+    match /evidencias/{revisionId}/{fileName} {
+      // Leer: cualquier usuario autenticado
+      allow read: if estaAutenticado();
+
+      // Escribir: usuario autenticado, solo imágenes < 5MB
+      allow write: if estaAutenticado() &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        request.resource.contentType.matches('image/.*');
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // FIRMAS: Imágenes de firmas digitales
+    // ══════════════════════════════════════════════════════════════
+
+    match /firmas/{revisionId}/{fileName} {
+      // Leer: cualquier usuario autenticado
+      allow read: if estaAutenticado();
+
+      // Escribir: usuario autenticado, solo PNG < 500KB
+      allow write: if estaAutenticado() &&
+        request.resource.size < 500 * 1024 &&
+        request.resource.contentType == 'image/png';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // ACTAS PDF: Solo Cloud Functions pueden escribir
+    // ══════════════════════════════════════════════════════════════
+
+    match /actas/{fileName} {
+      // Leer: cualquier usuario autenticado
+      allow read: if estaAutenticado();
+
+      // Escribir: solo Cloud Functions (Admin SDK)
+      allow write: if false;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // LOGO E IMÁGENES INSTITUCIONALES
+    // ══════════════════════════════════════════════════════════════
+
+    match /institucional/{fileName} {
+      // Leer: público
+      allow read: if true;
+
+      // Escribir: nadie desde cliente
+      allow write: if false;
+    }
+  }
+}

@@ -1,0 +1,89 @@
+{
+    "indexes": [
+        {
+            "collectionGroup": "revisiones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "custodioId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "fecha",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "revisiones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "revisorId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "fecha",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "revisiones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "activoId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "fecha",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "revisiones",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "estado",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "creadoEn",
+                    "order": "DESCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "activos",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "custodioId",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "codigo",
+                    "order": "ASCENDING"
+                }
+            ]
+        },
+        {
+            "collectionGroup": "auditoria",
+            "queryScope": "COLLECTION",
+            "fields": [
+                {
+                    "fieldPath": "modulo",
+                    "order": "ASCENDING"
+                },
+                {
+                    "fieldPath": "timestamp",
+                    "order": "DESCENDING"
+                }
+            ]
+        }
+    ],
+    "fieldOverrides": []
+}

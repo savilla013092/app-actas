@@ -1,0 +1,132 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ══════════════════════════════════════════════════════════════
+    // FUNCIONES AUXILIARES
+    // ══════════════════════════════════════════════════════════════
+
+    function estaAutenticado() {
+      return request.auth != null;
+    }
+
+    function existeUsuario() {
+      return estaAutenticado() &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function obtenerUsuario() {
+      return get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data;
+    }
+
+    function esAdmin() {
+      return existeUsuario() && obtenerUsuario().rol == 'admin';
+    }
+
+    function esLogistica() {
+      return existeUsuario() && obtenerUsuario().rol == 'logistica';
+    }
+
+    function esCustodio() {
+      return existeUsuario() && obtenerUsuario().rol == 'custodio';
+    }
+
+    function esElMismoUsuario(userId) {
+      return estaAutenticado() && request.auth.uid == userId;
+    }
+
+    function esCustodioDelActivo(activoId) {
+      return estaAutenticado() &&
+        get(/databases/$(database)/documents/activos/$(activoId)).data.custodioId == request.auth.uid;
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // COLECCIÓN: USUARIOS
+    // ══════════════════════════════════════════════════════════════
+
+    match /usuarios/{userId} {
+      // Leer: todos los autenticados pueden ver usuarios (para selects, etc.)
+      allow read: if estaAutenticado();
+
+      // Crear: admin puede crear cualquiera, o el usuario puede crear su propio documento (auto-registro)
+      allow create: if esAdmin() || (estaAutenticado() && request.auth.uid == userId);
+
+      // Actualizar: admin puede todo, usuario solo su perfil (sin cambiar rol)
+      allow update: if esAdmin() ||
+        (esElMismoUsuario(userId) &&
+         !request.resource.data.diff(resource.data).affectedKeys().hasAny(['rol', 'activo']));
+
+      // Eliminar: solo admin
+      allow delete: if esAdmin();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // COLECCIÓN: ACTIVOS
+    // ══════════════════════════════════════════════════════════════
+
+    match /activos/{activoId} {
+      // Leer: admin y logística ven todos, custodio solo los suyos
+      allow read: if esAdmin() || esLogistica() || esCustodioDelActivo(activoId);
+
+      // Escribir: solo admin y logística
+      allow create, update: if esAdmin() || esLogistica();
+
+      // Eliminar: solo admin
+      allow delete: if esAdmin();
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // COLECCIÓN: REVISIONES
+    // ══════════════════════════════════════════════════════════════
+
+    match /revisiones/{revisionId} {
+      // Leer: admin ve todas, logística ve las que creó, custodio las de sus activos
+      allow read: if esAdmin() ||
+        resource.data.revisorId == request.auth.uid ||
+        resource.data.custodioId == request.auth.uid;
+
+      // Crear: solo logística puede crear revisiones
+      allow create: if esLogistica() &&
+        request.resource.data.revisorId == request.auth.uid &&
+        request.resource.data.estado == 'borrador';
+
+      // Actualizar:
+      // - Logística puede actualizar borradores y agregar su firma
+      // - Custodio solo puede agregar su firma cuando está pendiente
+      allow update: if esAdmin() ||
+        // Logística: puede editar borrador y agregar firma
+        (esLogistica() &&
+         resource.data.revisorId == request.auth.uid &&
+         resource.data.estado in ['borrador', 'pendiente_firma_custodio']) ||
+        // Custodio: solo puede agregar su firma cuando está pendiente
+        (esCustodio() &&
+         resource.data.custodioId == request.auth.uid &&
+         resource.data.estado == 'pendiente_firma_custodio' &&
+         // Solo puede modificar firmaCustodio y estado
+         request.resource.data.diff(resource.data).affectedKeys().hasOnly(['firmaCustodio', 'estado', 'actualizadoEn']));
+
+      // Eliminar: solo admin, solo borradores
+      allow delete: if esAdmin() && resource.data.estado == 'borrador';
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // COLECCIÓN: CONSECUTIVOS (solo Cloud Functions)
+    // ══════════════════════════════════════════════════════════════
+
+    match /consecutivos/{docId} {
+      allow read, write: if false; // Solo accesible por Admin SDK
+    }
+
+    // ══════════════════════════════════════════════════════════════
+    // COLECCIÓN: AUDITORÍA
+    // ══════════════════════════════════════════════════════════════
+
+    match /auditoria/{logId} {
+      // Solo admin puede leer
+      allow read: if esAdmin();
+
+      // Nadie puede escribir directamente (solo Cloud Functions)
+      allow write: if false;
+    }
+  }
+}
