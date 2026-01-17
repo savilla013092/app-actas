@@ -5,6 +5,9 @@ import { collection, doc, setDoc, getDocs, serverTimestamp } from 'firebase/fire
 // IMPORTANTE: Esta ruta es solo para desarrollo
 // Eliminar o proteger en producción
 
+// Force dynamic rendering
+export const dynamic = 'force-dynamic';
+
 const custodiosDemo = [
     {
         id: 'custodio_demo_001',
