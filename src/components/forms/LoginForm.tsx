@@ -32,10 +32,21 @@ export function LoginForm() {
         setLoading(true);
 
         try {
-            await signInWithEmailAndPassword(auth, data.email, data.password);
+            console.log('Intentando login con:', data.email);
+            const result = await signInWithEmailAndPassword(auth, data.email, data.password);
+            console.log('Login exitoso:', result.user.uid);
             router.push('/dashboard');
         } catch (err: any) {
-            setError('Credenciales inválidas. Por favor verifique su correo y contraseña.');
+            console.error('Error de login:', err.code, err.message);
+            if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
+                setError('Credenciales inválidas. Por favor verifique su correo y contraseña.');
+            } else if (err.code === 'auth/invalid-api-key') {
+                setError('Error de configuración. Contacte al administrador.');
+            } else if (err.code === 'auth/network-request-failed') {
+                setError('Error de conexión. Verifique su internet.');
+            } else {
+                setError(`Error: ${err.message || 'Error desconocido'}`);
+            }
         } finally {
             setLoading(false);
         }
