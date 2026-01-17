@@ -12,7 +12,10 @@
       "Bash(copy:*)",
       "Bash(npx firebase deploy:*)",
       "Bash(npx firebase functions:log:*)",
-      "Bash(dir:*)"
+      "Bash(dir:*)",
+      "Bash(npx vercel:*)",
+      "WebFetch(domain:vercel.com)",
+      "Bash(node --version:*)"
     ]
   }
 }
