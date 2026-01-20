@@ -223,13 +223,19 @@ export async function obtenerRevisionesPorActivo(activoId: string): Promise<Revi
     }
 }
 
-// Obtener todas las revisiones
+// Obtener todas las revisiones (ordenadas por fecha, más recientes primero)
 export async function obtenerTodasLasRevisiones(): Promise<Revision[]> {
     const snapshot = await getDocs(collection(db, COLLECTION));
-    return snapshot.docs.map(doc => ({
-        id: doc.id,
-        ...doc.data(),
-    })) as Revision[];
+    const revisiones = snapshot.docs
+        .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
+        .sort((a, b) => {
+            const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
+                ? (a.fecha as { seconds: number }).seconds : 0;
+            const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
+                ? (b.fecha as { seconds: number }).seconds : 0;
+            return fechaB - fechaA;
+        });
+    return revisiones;
 }
 
 // Obtener estadísticas del dashboard

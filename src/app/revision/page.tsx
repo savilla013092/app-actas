@@ -24,11 +24,9 @@ export default function RevisionesPage() {
             if (!user) return;
             try {
                 let items: Revision[] = [];
-                if (isAdmin()) {
-                    // Admin ve todas las revisiones
+                if (isAdmin() || isLogistica()) {
+                    // Admin y Logística ven todas las revisiones
                     items = await obtenerTodasLasRevisiones();
-                } else if (isLogistica()) {
-                    items = await obtenerRevisionesPorRevisor(user.uid);
                 } else if (isCustodio()) {
                     items = await obtenerRevisionesPendientesFirma(user.uid);
                 }
