@@ -82,7 +82,7 @@ export default function RevisionesPage() {
                     <p className="text-gray-500">
                         {isCustodio()
                             ? 'Revisiones pendientes de tu firma.'
-                            : 'Gestión y seguimiento de actas de activos fijos.'}
+                            : `Mostrando ${revisiones.length} revisiones.`}
                     </p>
                 </div>
             </div>

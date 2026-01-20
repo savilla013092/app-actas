@@ -225,17 +225,25 @@ export async function obtenerRevisionesPorActivo(activoId: string): Promise<Revi
 
 // Obtener todas las revisiones (ordenadas por fecha, más recientes primero)
 export async function obtenerTodasLasRevisiones(): Promise<Revision[]> {
-    const snapshot = await getDocs(collection(db, COLLECTION));
-    const revisiones = snapshot.docs
-        .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-        .sort((a, b) => {
-            const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                ? (a.fecha as { seconds: number }).seconds : 0;
-            const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                ? (b.fecha as { seconds: number }).seconds : 0;
-            return fechaB - fechaA;
-        });
-    return revisiones;
+    try {
+        console.log('Obteniendo todas las revisiones...');
+        const snapshot = await getDocs(collection(db, COLLECTION));
+        console.log(`Se encontraron ${snapshot.docs.length} revisiones en Firestore`);
+
+        const revisiones = snapshot.docs
+            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
+            .sort((a, b) => {
+                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
+                    ? (a.fecha as { seconds: number }).seconds : 0;
+                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
+                    ? (b.fecha as { seconds: number }).seconds : 0;
+                return fechaB - fechaA;
+            });
+        return revisiones;
+    } catch (error) {
+        console.error('Error obteniendo todas las revisiones:', error);
+        return [];
+    }
 }
 
 // Obtener estadísticas del dashboard
