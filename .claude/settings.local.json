@@ -15,7 +15,10 @@
       "Bash(dir:*)",
       "Bash(npx vercel:*)",
       "WebFetch(domain:vercel.com)",
-      "Bash(node --version:*)"
+      "Bash(node --version:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "WebFetch(domain:app-actas-serviciudad.vercel.app)"
     ]
   }
 }
