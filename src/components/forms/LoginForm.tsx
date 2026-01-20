@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useForm } from 'react-hook-form';
@@ -21,32 +21,67 @@ type LoginFormData = z.infer<typeof loginSchema>;
 export function LoginForm() {
     const [error, setError] = useState<string | null>(null);
     const [loading, setLoading] = useState(false);
+    const [configStatus, setConfigStatus] = useState<'checking' | 'ok' | 'error'>('checking');
     const router = useRouter();
 
     const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
     });
 
+    // Verificar configuración de Firebase al cargar
+    useEffect(() => {
+        const checkConfig = () => {
+            const hasApiKey = !!process.env.NEXT_PUBLIC_FIREBASE_API_KEY;
+            const hasAuthDomain = !!process.env.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN;
+            const hasProjectId = !!process.env.NEXT_PUBLIC_FIREBASE_PROJECT_ID;
+
+            if (hasApiKey && hasAuthDomain && hasProjectId) {
+                setConfigStatus('ok');
+            } else {
+                setConfigStatus('error');
+                console.error('Firebase config missing:', {
+                    hasApiKey,
+                    hasAuthDomain,
+                    hasProjectId
+                });
+            }
+        };
+        checkConfig();
+    }, []);
+
     const onSubmit = async (data: LoginFormData) => {
         setError(null);
         setLoading(true);
 
         try {
-            console.log('Intentando login con:', data.email);
+            // Verificar que Firebase esté configurado
+            if (!auth || !auth.app) {
+                throw new Error('Firebase no está configurado correctamente');
+            }
+
             const result = await signInWithEmailAndPassword(auth, data.email, data.password);
-            console.log('Login exitoso:', result.user.uid);
-            router.push('/dashboard');
+
+            if (result.user) {
+                router.push('/dashboard');
+            }
         } catch (err: any) {
             console.error('Error de login:', err.code, err.message);
-            if (err.code === 'auth/invalid-credential' || err.code === 'auth/wrong-password' || err.code === 'auth/user-not-found') {
-                setError('Credenciales inválidas. Por favor verifique su correo y contraseña.');
-            } else if (err.code === 'auth/invalid-api-key') {
-                setError('Error de configuración. Contacte al administrador.');
-            } else if (err.code === 'auth/network-request-failed') {
-                setError('Error de conexión. Verifique su internet.');
-            } else {
-                setError(`Error: ${err.message || 'Error desconocido'}`);
-            }
+
+            // Mapeo de errores de Firebase a mensajes amigables
+            const errorMessages: Record<string, string> = {
+                'auth/invalid-credential': 'Credenciales inválidas. Por favor verifique su correo y contraseña.',
+                'auth/wrong-password': 'Contraseña incorrecta.',
+                'auth/user-not-found': 'Usuario no encontrado.',
+                'auth/invalid-api-key': 'Error de configuración del servidor. Contacte al administrador.',
+                'auth/network-request-failed': 'Error de conexión. Verifique su internet.',
+                'auth/too-many-requests': 'Demasiados intentos. Intente de nuevo en unos minutos.',
+                'auth/user-disabled': 'Esta cuenta ha sido deshabilitada.',
+                'auth/operation-not-allowed': 'Operación no permitida. Contacte al administrador.',
+                'auth/unauthorized-domain': 'Este dominio no está autorizado. Contacte al administrador.',
+            };
+
+            const errorMessage = errorMessages[err.code] || `Error: ${err.message || 'Error desconocido'}`;
+            setError(errorMessage);
         } finally {
             setLoading(false);
         }
@@ -75,6 +110,13 @@ export function LoginForm() {
                 />
                 {errors.password && <p className="text-sm text-red-500 mt-1">{errors.password.message}</p>}
             </div>
+
+            {configStatus === 'error' && (
+                <div className="p-3 bg-yellow-50 border border-yellow-200 rounded text-yellow-800 text-sm">
+                    <strong>Configuración incompleta:</strong> Las variables de entorno de Firebase no están configuradas.
+                    Verifique la configuración en Vercel.
+                </div>
+            )}
 
             {error && (
                 <div className="p-3 bg-red-50 border border-red-200 rounded text-red-700 text-sm">
