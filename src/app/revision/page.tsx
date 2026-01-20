@@ -56,9 +56,11 @@ export default function RevisionesPage() {
             case 'pendiente_firma_custodio':
                 return <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Pendiente Firma</span>;
             case 'firmada_completa':
-                return <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Procesando</span>;
+                return <span className="bg-blue-100 text-blue-700 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Generando PDF...</span>;
             case 'completada':
                 return <span className="bg-green-100 text-green-700 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideCheckCircle size={10} /> Completada</span>;
+            case 'error_generacion':
+                return <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] uppercase font-bold">Error al generar</span>;
             default:
                 return <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] uppercase font-bold text-center">{estado}</span>;
         }
