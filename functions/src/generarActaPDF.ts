@@ -94,7 +94,7 @@ export async function generarActaPDF({ numeroActa, revision, storage }: GenerarP
             }
 
             doc.fontSize(10).font('Helvetica');
-            doc.text('NIT: 123.456.789-0', { align: 'center' });
+            doc.text('NIT: 816.001.609-1', { align: 'center' });
             doc.text('Dirección de Activos Fijos', { align: 'center' });
             doc.moveDown();
 
