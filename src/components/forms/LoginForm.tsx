@@ -7,7 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { auth } from '@/lib/firebase/config';
-import { useAuthStore } from '@/stores/authStore';
+import { useAuth } from '@/hooks/useAuth';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -24,6 +24,7 @@ export function LoginForm() {
     const [loading, setLoading] = useState(false);
     const [configStatus, setConfigStatus] = useState<'checking' | 'ok' | 'error'>('checking');
     const router = useRouter();
+    const { user: authUser, loading: authLoading } = useAuth();
 
     const { register, handleSubmit, formState: { errors } } = useForm<LoginFormData>({
         resolver: zodResolver(loginSchema),
@@ -50,6 +51,13 @@ export function LoginForm() {
         checkConfig();
     }, []);
 
+    // Redirigir al dashboard cuando el usuario esté autenticado
+    useEffect(() => {
+        if (!authLoading && authUser) {
+            router.push('/dashboard');
+        }
+    }, [authUser, authLoading, router]);
+
     const onSubmit = async (data: LoginFormData) => {
         setError(null);
         setLoading(true);
@@ -60,23 +68,8 @@ export function LoginForm() {
                 throw new Error('Firebase no está configurado correctamente');
             }
 
-            const result = await signInWithEmailAndPassword(auth, data.email, data.password);
-
-            if (result.user) {
-                // Esperar a que el store de auth esté listo antes de redirigir
-                await new Promise<void>((resolve) => {
-                    const checkAuth = () => {
-                        const state = useAuthStore.getState();
-                        if (!state.loading && state.user) {
-                            resolve();
-                        } else {
-                            setTimeout(checkAuth, 100);
-                        }
-                    };
-                    checkAuth();
-                });
-                router.push('/dashboard');
-            }
+            await signInWithEmailAndPassword(auth, data.email, data.password);
+            // El useEffect se encargará de redirigir cuando authUser esté listo
         } catch (err: any) {
             console.error('Error de login:', err.code, err.message);
 
