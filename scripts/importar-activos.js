@@ -7,8 +7,13 @@ const admin = require('firebase-admin');
 const XLSX = require('xlsx');
 const path = require('path');
 
-// Inicializar Firebase Admin con Application Default Credentials
+// Inicializar Firebase Admin con Service Account Key
+// La ubicación del archivo debe ser: C:\Users\<usuario>\firebase-credentials\service-account.json
+const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT ||
+    path.join(require('os').homedir(), 'firebase-credentials', 'service-account.json');
+const serviceAccount = require(serviceAccountPath);
 admin.initializeApp({
+    credential: admin.credential.cert(serviceAccount),
     projectId: 'serviciudad-actas',
 });
 
@@ -113,8 +118,8 @@ async function importarActivos() {
         // Crear usuarios por defecto
         const { custodioId } = await crearUsuarioAdmin();
 
-        // Leer archivo Excel
-        const archivoExcel = path.join(__dirname, '..', '2420.xlsx');
+        // Leer archivo Excel desde carpeta data/
+        const archivoExcel = path.join(__dirname, '..', 'data', 'Listado_activos.xlsx');
         console.log(`\nLeyendo archivo: ${archivoExcel}`);
 
         const workbook = XLSX.readFile(archivoExcel);
@@ -139,8 +144,8 @@ async function importarActivos() {
             MODELO: 50,          // Modelo
             FECHA_ADQ: 63,       // Fecha Adquisición
             VALOR: 64,           // Valor Costo Adquisición
-            RETIRADO: 75,        // Retirado
-            DEPRECIADO: 76,      // Depreciado
+            RETIRADO: 76,        // Retirado
+            DEPRECIADO: 77,      // Depreciado
         };
 
         // Importar activos en lotes

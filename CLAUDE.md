@@ -30,35 +30,38 @@ npm run firebase:deploy      # Deploy to Firebase
 
 ### Project Structure
 ```
-src/
-├── app/                    # Next.js App Router pages
-│   ├── auth/login/         # Login page
-│   ├── dashboard/          # Main dashboard
-│   ├── activos/            # Asset management pages
-│   └── revision/           # Revision workflow pages
-├── components/
-│   ├── ui/                 # Reusable UI components (button, input, card, etc.)
-│   ├── forms/              # Form components (LoginForm, RevisionForm)
-│   ├── layout/             # Layout components (AuthGuard)
-│   ├── signature/          # SignaturePad component
-│   └── revision/           # Revision-specific components
-├── lib/
-│   ├── firebase/config.ts  # Firebase initialization
-│   └── utils/              # Utilities (cn, hash)
-├── services/               # Firestore service layer
-│   ├── activoService.ts    # Asset CRUD operations
-│   ├── revisionService.ts  # Revision workflow + signatures
-│   ├── usuarioService.ts   # User operations
-│   └── auditoriaService.ts # Audit logging
-├── stores/                 # Zustand stores
-│   └── authStore.ts        # Authentication state
-├── hooks/                  # Custom hooks
-│   └── useAuth.ts          # Auth hook
-└── types/                  # TypeScript type definitions
-    ├── usuario.ts          # User types + roles
-    ├── activo.ts           # Asset types
-    └── revision.ts         # Revision + signature types
+APP_ACTAS/
+├── src/                    # Main application source
+│   ├── app/                # Next.js App Router pages
+│   │   ├── auth/login/     # Login page
+│   │   ├── dashboard/      # Main dashboard
+│   │   ├── activos/        # Asset management pages
+│   │   └── revision/       # Revision workflow pages
+│   ├── components/
+│   │   ├── ui/             # Reusable UI components
+│   │   ├── forms/          # Form components
+│   │   ├── layout/         # Layout components (AuthGuard)
+│   │   ├── signature/      # SignaturePad component
+│   │   └── revision/       # Revision-specific components
+│   ├── lib/
+│   │   ├── firebase/config.ts  # Firebase initialization
+│   │   └── utils/          # Utilities (cn, hash)
+│   ├── services/           # Firestore service layer
+│   ├── stores/             # Zustand stores
+│   ├── hooks/              # Custom hooks
+│   └── types/              # TypeScript type definitions
+├── scripts/                # Utility scripts
+│   ├── importar-activos.js # Import assets from Excel
+│   └── limpiar-datos.js    # Data cleanup utilities
+├── functions/              # Firebase Cloud Functions
+├── docs/                   # Documentation
+│   └── GUIA_IMPORTACION.md # Asset import guide
+├── data/                   # Data files (git-ignored)
+│   └── Listado_activos.xlsx # Current assets list
+└── ... (config files)
 ```
+
+**Note**: Firebase credentials (`service-account.json`) should be stored outside the project in `C:\Users\<user>\firebase-credentials\`
 
 ### Path Alias
 Use `@/*` for imports from `src/` directory.

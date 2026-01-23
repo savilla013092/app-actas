@@ -43,3 +43,13 @@ firebase-debug.log
 firestore-debug.log
 ui-debug.log
 .vercel
+
+# Credentials (keep outside project)
+service-account.json
+
+# Data files
+data/
+*.xlsx
+
+# Misc
+NUL
