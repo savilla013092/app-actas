@@ -7,6 +7,7 @@ import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
 import { auth } from '@/lib/firebase/config';
+import { useAuthStore } from '@/stores/authStore';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -62,6 +63,18 @@ export function LoginForm() {
             const result = await signInWithEmailAndPassword(auth, data.email, data.password);
 
             if (result.user) {
+                // Esperar a que el store de auth esté listo antes de redirigir
+                await new Promise<void>((resolve) => {
+                    const checkAuth = () => {
+                        const state = useAuthStore.getState();
+                        if (!state.loading && state.user) {
+                            resolve();
+                        } else {
+                            setTimeout(checkAuth, 100);
+                        }
+                    };
+                    checkAuth();
+                });
                 router.push('/dashboard');
             }
         } catch (err: any) {
