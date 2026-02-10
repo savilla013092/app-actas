@@ -219,6 +219,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                     <div>
                         <Label htmlFor="codigo">Código del Activo *</Label>
                         <Input
+                            id="codigo"
                             {...register('codigo')}
                             placeholder="Ej: AF-MOB-2024-0001"
                         />
@@ -227,7 +228,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
                     <div>
                         <Label htmlFor="categoria">Categoría *</Label>
-                        <Select {...register('categoria')}>
+                        <Select id="categoria" {...register('categoria')}>
                             <option value="">Seleccione una categoría</option>
                             {CATEGORIAS.map(cat => (
                                 <option key={cat} value={cat}>{cat}</option>
@@ -240,6 +241,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                 <div>
                     <Label htmlFor="descripcion">Descripción *</Label>
                     <Textarea
+                        id="descripcion"
                         {...register('descripcion')}
                         rows={2}
                         placeholder="Descripción detallada del activo"
@@ -250,28 +252,28 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                 <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
                         <Label htmlFor="marca">Marca</Label>
-                        <Input {...register('marca')} placeholder="Ej: Dell" />
+                        <Input id="marca" {...register('marca')} placeholder="Ej: Dell" />
                     </div>
                     <div>
                         <Label htmlFor="modelo">Modelo</Label>
-                        <Input {...register('modelo')} placeholder="Ej: Optiplex 7090" />
+                        <Input id="modelo" {...register('modelo')} placeholder="Ej: Optiplex 7090" />
                     </div>
                     <div>
                         <Label htmlFor="serial">Serial</Label>
-                        <Input {...register('serial')} placeholder="Número de serie" />
+                        <Input id="serial" {...register('serial')} placeholder="Número de serie" />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="ubicacion">Ubicación *</Label>
-                        <Input {...register('ubicacion')} placeholder="Ej: Oficina 201, Piso 2" />
+                        <Input id="ubicacion" {...register('ubicacion')} placeholder="Ej: Oficina 201, Piso 2" />
                         {errors.ubicacion && <p className="text-red-500 text-sm mt-1">{errors.ubicacion.message}</p>}
                     </div>
 
                     <div>
                         <Label htmlFor="dependencia">Dependencia *</Label>
-                        <Select {...register('dependencia')}>
+                        <Select id="dependencia" {...register('dependencia')}>
                             <option value="">Seleccione una dependencia</option>
                             {DEPENDENCIAS.map(dep => (
                                 <option key={dep} value={dep}>{dep}</option>
@@ -283,8 +285,8 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <Label htmlFor="custodioId">Custodio Responsable *</Label>
-                        <Select {...register('custodioId')} disabled={loadingCustodios}>
+                        <Label htmlFor="custodioId">Custodio Responsable (opcional)</Label>
+                        <Select id="custodioId" {...register('custodioId')} disabled={loadingCustodios}>
                             <option value="">
                                 {loadingCustodios ? 'Cargando custodios...' : 'Seleccione un custodio'}
                             </option>
@@ -304,7 +306,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
                     <div>
                         <Label htmlFor="estado">Estado *</Label>
-                        <Select {...register('estado')}>
+                        <Select id="estado" {...register('estado')}>
                             <option value="activo">Activo</option>
                             <option value="mantenimiento">En Mantenimiento</option>
                             <option value="traslado">En Traslado</option>
@@ -317,6 +319,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                     <div>
                         <Label htmlFor="valorAdquisicion">Valor de Adquisición</Label>
                         <Input
+                            id="valorAdquisicion"
                             type="number"
                             step="0.01"
                             {...register('valorAdquisicion')}
@@ -325,13 +328,14 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                     </div>
                     <div>
                         <Label htmlFor="fechaAdquisicion">Fecha de Adquisición</Label>
-                        <Input type="date" {...register('fechaAdquisicion')} />
+                        <Input id="fechaAdquisicion" type="date" {...register('fechaAdquisicion')} />
                     </div>
                 </div>
 
                 <div>
                     <Label htmlFor="observaciones">Observaciones</Label>
                     <Textarea
+                        id="observaciones"
                         {...register('observaciones')}
                         rows={2}
                         placeholder="Observaciones adicionales sobre el activo"
