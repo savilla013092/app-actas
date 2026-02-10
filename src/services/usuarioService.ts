@@ -12,6 +12,9 @@ import { Usuario } from '@/types/usuario';
 
 const COLLECTION = 'usuarios';
 
+const stripUndefined = <T extends Record<string, unknown>>(data: T): T =>
+    Object.fromEntries(Object.entries(data).filter(([, value]) => value !== undefined)) as T;
+
 export async function obtenerTodosLosUsuarios(): Promise<Usuario[]> {
     const snapshot = await getDocs(collection(db, COLLECTION));
     return snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Usuario));
@@ -24,16 +27,18 @@ export async function obtenerUsuario(id: string): Promise<Usuario | null> {
 }
 
 export async function crearUsuario(id: string, data: Omit<Usuario, 'id' | 'creadoEn' | 'actualizadoEn'>): Promise<void> {
-    await setDoc(doc(db, COLLECTION, id), {
+    const payload = stripUndefined({
         ...data,
         creadoEn: serverTimestamp(),
         actualizadoEn: serverTimestamp(),
     });
+    await setDoc(doc(db, COLLECTION, id), payload);
 }
 
 export async function actualizarUsuario(id: string, data: Partial<Usuario>): Promise<void> {
-    await updateDoc(doc(db, COLLECTION, id), {
+    const payload = stripUndefined({
         ...data,
         actualizadoEn: serverTimestamp(),
     });
+    await updateDoc(doc(db, COLLECTION, id), payload);
 }
