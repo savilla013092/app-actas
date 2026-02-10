@@ -217,10 +217,10 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
     return (
         <Card className="p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-foreground">
                     {isEditing ? 'Editar Activo' : 'Nuevo Activo'}
                 </h2>
-                <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+                <button onClick={onCancel} className="text-muted-foreground hover:text-foreground">
                     <LucideX size={24} />
                 </button>
             </div>

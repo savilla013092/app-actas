@@ -101,8 +101,8 @@ export default function NuevaRevisionPage() {
             </div>
 
             <div className="mb-8">
-                <h2 className="text-2xl font-bold text-gray-900">Nueva Revisión de Activo</h2>
-                <p className="text-gray-500">Complete los pasos para registrar el estado actual del activo.</p>
+                <h2 className="text-2xl font-bold text-foreground">Nueva Revisión de Activo</h2>
+                <p className="text-muted-foreground">Complete los pasos para registrar el estado actual del activo.</p>
             </div>
 
             <Card className="p-8">

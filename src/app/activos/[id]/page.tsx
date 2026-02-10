@@ -60,7 +60,7 @@ export default function ActivoDetailPage() {
             case 'firmada_completa':
                 return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Procesando</span>;
             default:
-                return <span className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-[10px] uppercase font-bold">{estado}</span>;
+                return <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-[10px] uppercase font-bold">{estado}</span>;
         }
     };
 
@@ -85,8 +85,8 @@ export default function ActivoDetailPage() {
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">{activo.descripcion}</h2>
-                    <p className="text-gray-500 font-mono text-sm">{activo.codigo}</p>
+                    <h2 className="text-2xl font-bold text-foreground">{activo.descripcion}</h2>
+                    <p className="text-muted-foreground font-mono text-sm">{activo.codigo}</p>
                 </div>
 
                 <div className="flex gap-2">
@@ -101,63 +101,63 @@ export default function ActivoDetailPage() {
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <Card className="md:col-span-2 p-6 space-y-8">
                     <section>
-                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2">
+                        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideBox size={20} className="text-primary" />
                             Detalles del Activo
                         </h3>
                         <div className="grid grid-cols-2 gap-y-6 gap-x-8">
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Categoría</p>
-                                <p className="text-gray-900 font-medium">{activo.categoria}</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Categoría</p>
+                                <p className="text-foreground font-medium">{activo.categoria}</p>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Estado</p>
-                                <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full uppercase">
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Estado</p>
+                                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full uppercase">
                                     {activo.estado}
                                 </span>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Marca / Modelo</p>
-                                <p className="text-gray-900 font-medium">{activo.marca || 'N/A'} - {activo.modelo || 'N/A'}</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Marca / Modelo</p>
+                                <p className="text-foreground font-medium">{activo.marca || 'N/A'} - {activo.modelo || 'N/A'}</p>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Serial</p>
-                                <p className="text-gray-900 font-medium font-mono">{activo.serial || 'S/N'}</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Serial</p>
+                                <p className="text-foreground font-medium font-mono">{activo.serial || 'S/N'}</p>
                             </div>
                             <div className="col-span-2">
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Ubicación / Dependencia</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Ubicación / Dependencia</p>
                                 <div className="flex items-center gap-2">
-                                    <LucideMapPin size={16} className="text-gray-400" />
-                                    <p className="text-gray-900 font-medium">{activo.ubicacion} - {activo.dependencia}</p>
+                                    <LucideMapPin size={16} className="text-muted-foreground" />
+                                    <p className="text-foreground font-medium">{activo.ubicacion} - {activo.dependencia}</p>
                                 </div>
                             </div>
                         </div>
                     </section>
 
                     <section>
-                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2">
+                        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideHistory size={20} className="text-primary" />
                             Historial de Revisiones
                         </h3>
                         {loadingRevisiones ? (
-                            <div className="text-center py-8 bg-gray-50 rounded-lg">
+                            <div className="text-center py-8 bg-muted rounded-lg border border-border">
                                 <Spinner size="sm" />
-                                <p className="text-gray-500 text-sm italic mt-2">Cargando historial...</p>
+                                <p className="text-muted-foreground text-sm italic mt-2">Cargando historial...</p>
                             </div>
                         ) : revisiones.length > 0 ? (
                             <div className="space-y-3">
                                 {revisiones.map((revision) => (
                                     <Link key={revision.id} href={`/revision/${revision.id}`}>
-                                        <div className="flex items-center justify-between p-3 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                                        <div className="flex items-center justify-between p-3 bg-muted rounded-lg hover:bg-muted/70 transition-colors cursor-pointer border border-border">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border">
+                                                <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-border">
                                                     <LucideFileText size={18} className="text-primary" />
                                                 </div>
                                                 <div>
-                                                    <p className="font-medium text-gray-900 text-sm">
+                                                    <p className="font-medium text-foreground text-sm">
                                                         {revision.numeroActa || `Borrador (${revision.id.substring(0, 6)})`}
                                                     </p>
-                                                    <p className="text-xs text-gray-500">
+                                                    <p className="text-xs text-muted-foreground">
                                                         {new Date(revision.fecha).toLocaleDateString('es-CO')} - {revision.revisorNombre}
                                                     </p>
                                                 </div>
@@ -171,27 +171,27 @@ export default function ActivoDetailPage() {
                                 ))}
                             </div>
                         ) : (
-                            <div className="text-center py-8 bg-gray-50 rounded-lg">
-                                <LucideFileText className="mx-auto text-gray-300 mb-2" size={32} />
-                                <p className="text-gray-500 text-sm">No hay revisiones registradas para este activo.</p>
+                            <div className="text-center py-8 bg-muted rounded-lg border border-border">
+                                <LucideFileText className="mx-auto text-muted-foreground mb-2" size={32} />
+                                <p className="text-muted-foreground text-sm">No hay revisiones registradas para este activo.</p>
                             </div>
                         )}
                     </section>
                 </Card>
 
                 <Card className="p-6 h-fit">
-                    <h3 className="font-bold text-gray-900 mb-4 border-b pb-2 flex items-center gap-2">
+                    <h3 className="font-bold text-foreground mb-4 border-b border-border pb-2 flex items-center gap-2">
                         <LucideUser size={18} className="text-primary" />
                         Custodio Actual
                     </h3>
                     <div className="space-y-4">
                         <div>
-                            <p className="text-sm font-bold text-gray-900">{activo.custodioNombre}</p>
-                            <p className="text-xs text-gray-500">ID: {activo.custodioId}</p>
+                            <p className="text-sm font-bold text-foreground">{activo.custodioNombre}</p>
+                            <p className="text-xs text-muted-foreground">ID: {activo.custodioId}</p>
                         </div>
                         <div className="pt-4 border-t">
-                            <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-2">Registrado el</p>
-                            <p className="text-sm text-gray-700">
+                            <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-2">Registrado el</p>
+                            <p className="text-sm text-foreground">
                                 {activo.creadoEn ? new Date(activo.creadoEn).toLocaleDateString('es-CO') : 'Sin fecha'}
                             </p>
                         </div>

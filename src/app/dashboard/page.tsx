@@ -111,8 +111,8 @@ export default function DashboardPage() {
     return (
         <div className="space-y-8">
             <div>
-                <h2 className="text-2xl font-bold text-gray-900">Bienvenido de nuevo, {user?.usuario?.nombre}</h2>
-                <p className="text-gray-500">Aquí tienes un resumen de la actividad reciente.</p>
+                <h2 className="text-2xl font-bold text-foreground">Bienvenido de nuevo, {user?.usuario?.nombre}</h2>
+                <p className="text-muted-foreground">Aquí tienes un resumen de la actividad reciente.</p>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
@@ -123,8 +123,8 @@ export default function DashboardPage() {
                                 <stat.icon size={24} />
                             </div>
                             <div>
-                                <p className="text-sm font-medium text-gray-500">{stat.label}</p>
-                                <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                                <p className="text-sm font-medium text-muted-foreground">{stat.label}</p>
+                                <p className="text-2xl font-bold text-foreground">{stat.value}</p>
                             </div>
                         </div>
                     </Card>
@@ -133,29 +133,29 @@ export default function DashboardPage() {
 
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
                 <Card className="p-6">
-                    <h3 className="font-bold text-gray-900 mb-4">Revisiones Recientes</h3>
+                    <h3 className="font-bold text-foreground mb-4">Revisiones Recientes</h3>
                     <div className="space-y-4">
                         {revisionesRecientes.length > 0 ? (
                             revisionesRecientes.map((revision) => (
                                 <Link href={`/revision/${revision.id}`} key={revision.id}>
-                                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg hover:bg-muted/70 transition-colors cursor-pointer border border-border">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border text-primary">
+                                            <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-border text-primary">
                                                 <LucideFileText size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-900">{revision.numeroActa || 'Sin número'}</p>
-                                                <p className="text-xs text-gray-500">{revision.descripcionActivo} - {formatDate(revision.fecha)}</p>
+                                                <p className="font-bold text-foreground">{revision.numeroActa || 'Sin número'}</p>
+                                                <p className="text-xs text-muted-foreground">{revision.descripcionActivo} - {formatDate(revision.fecha)}</p>
                                             </div>
                                         </div>
-                                        <span className="px-3 py-1 bg-green-100 text-green-700 text-xs font-bold rounded-full uppercase">
+                                        <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full uppercase">
                                             Completada
                                         </span>
                                     </div>
                                 </Link>
                             ))
                         ) : (
-                            <div className="text-center py-8 text-gray-500">
+                            <div className="text-center py-8 text-muted-foreground">
                                 No hay revisiones completadas todavía.
                             </div>
                         )}
@@ -163,21 +163,21 @@ export default function DashboardPage() {
                 </Card>
 
                 <Card className="p-6">
-                    <h3 className="font-bold text-gray-900 mb-4">
+                    <h3 className="font-bold text-foreground mb-4">
                         {isCustodio() ? 'Mis Pendientes de Firma' : 'Pendientes de Firma'}
                     </h3>
                     <div className="space-y-4">
                         {pendientesFirma.length > 0 ? (
                             pendientesFirma.map((revision) => (
                                 <Link href={`/revision/${revision.id}`} key={revision.id}>
-                                    <div className="flex items-center justify-between p-4 bg-gray-50 rounded-lg hover:bg-gray-100 transition-colors cursor-pointer">
+                                    <div className="flex items-center justify-between p-4 bg-muted rounded-lg hover:bg-muted/70 transition-colors cursor-pointer border border-border">
                                         <div className="flex items-center gap-4">
-                                            <div className="w-10 h-10 bg-white rounded-lg flex items-center justify-center border text-orange-500">
+                                            <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-border text-orange-500">
                                                 <LucideClock size={20} />
                                             </div>
                                             <div>
-                                                <p className="font-bold text-gray-900">Revisión {revision.codigoActivo}</p>
-                                                <p className="text-xs text-gray-500">
+                                                <p className="font-bold text-foreground">Revisión {revision.codigoActivo}</p>
+                                                <p className="text-xs text-muted-foreground">
                                                     Pendiente firma {isCustodio() ? '' : `de ${revision.custodioNombre}`}
                                                 </p>
                                             </div>
@@ -189,7 +189,7 @@ export default function DashboardPage() {
                                 </Link>
                             ))
                         ) : (
-                            <div className="text-center py-8 text-gray-500">
+                            <div className="text-center py-8 text-muted-foreground">
                                 No hay revisiones pendientes de firma.
                             </div>
                         )}

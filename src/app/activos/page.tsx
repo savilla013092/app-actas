@@ -74,8 +74,8 @@ export default function ActivosPage() {
         <div className="space-y-6">
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Inventario de Activos</h2>
-                    <p className="text-gray-500">Gestión y consulta de activos fijos institucionales.</p>
+                    <h2 className="text-2xl font-bold text-foreground">Inventario de Activos</h2>
+                    <p className="text-muted-foreground">Gestión y consulta de activos fijos institucionales.</p>
                 </div>
                 {!isCustodio() && (
                     <Button
@@ -93,7 +93,7 @@ export default function ActivosPage() {
 
             <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
-                    <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                     <Input
                         className="pl-10"
                         placeholder="Buscar por código, descripción o custodio..."
@@ -111,25 +111,25 @@ export default function ActivosPage() {
                 {filteredActivos.map((activo) => (
                     <Card key={activo.id} className="p-6 hover:shadow-md transition-shadow">
                         <div className="flex justify-between items-start mb-4">
-                            <span className="text-xs font-bold text-primary bg-primary/10 px-2 py-1 rounded uppercase tracking-wider">
+                            <span className="text-xs font-bold text-primary bg-primary/15 ring-1 ring-primary/20 px-2 py-1 rounded uppercase tracking-wider">
                                 {activo.categoria}
                             </span>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${activo.estado === 'activo' ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${activo.estado === 'activo' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
                                 }`}>
                                 {activo.estado}
                             </span>
                         </div>
-                        <h3 className="font-bold text-gray-900 mb-1">{activo.descripcion}</h3>
-                        <p className="text-sm text-gray-500 mb-4">{activo.codigo}</p>
+                        <h3 className="font-bold text-foreground mb-1">{activo.descripcion}</h3>
+                        <p className="text-sm text-muted-foreground mb-4">{activo.codigo}</p>
 
                         <div className="space-y-2 mb-6">
                             <div className="flex justify-between text-xs">
-                                <span className="text-gray-400">Ubicación:</span>
-                                <span className="text-gray-700 font-medium">{activo.ubicacion}</span>
+                                <span className="text-muted-foreground">Ubicación:</span>
+                                <span className="text-foreground font-medium">{activo.ubicacion}</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                                <span className="text-gray-400">Custodio:</span>
-                                <span className="text-gray-700 font-medium">{activo.custodioNombre}</span>
+                                <span className="text-muted-foreground">Custodio:</span>
+                                <span className="text-foreground font-medium">{activo.custodioNombre}</span>
                             </div>
                         </div>
 
@@ -157,8 +157,8 @@ export default function ActivosPage() {
             </div>
 
             {filteredActivos.length === 0 && (
-                <div className="text-center py-12 bg-white rounded-xl border">
-                    <p className="text-gray-500">No se encontraron activos que coincidan con la búsqueda.</p>
+                <div className="text-center py-12 bg-card rounded-xl border border-border">
+                    <p className="text-muted-foreground">No se encontraron activos que coincidan con la búsqueda.</p>
                 </div>
             )}
 

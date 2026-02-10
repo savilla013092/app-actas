@@ -70,23 +70,23 @@ export default function UsuariosPage() {
     const getRolIcon = (rol: string) => {
         switch (rol) {
             case 'admin':
-                return <LucideShield size={16} className="text-purple-600" />;
+                return <LucideShield size={16} className="text-indigo-700" />;
             case 'logistica':
-                return <LucideTruck size={16} className="text-blue-600" />;
+                return <LucideTruck size={16} className="text-sky-700" />;
             case 'custodio':
-                return <LucidePackage size={16} className="text-green-600" />;
+                return <LucidePackage size={16} className="text-emerald-700" />;
             default:
-                return <LucideUser size={16} className="text-gray-600" />;
+                return <LucideUser size={16} className="text-muted-foreground" />;
         }
     };
 
     const getRolBadge = (rol: string) => {
         const styles: Record<string, string> = {
-            admin: 'bg-purple-100 text-purple-700',
-            logistica: 'bg-blue-100 text-blue-700',
-            custodio: 'bg-green-100 text-green-700',
+            admin: 'bg-indigo-100 text-indigo-800',
+            logistica: 'bg-sky-100 text-sky-800',
+            custodio: 'bg-emerald-100 text-emerald-800',
         };
-        return styles[rol] || 'bg-gray-100 text-gray-700';
+        return styles[rol] || 'bg-muted text-muted-foreground';
     };
 
     if (loading) {
@@ -119,8 +119,8 @@ export default function UsuariosPage() {
 
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Gestión de Usuarios</h2>
-                    <p className="text-gray-500">Administración de usuarios del sistema.</p>
+                    <h2 className="text-2xl font-bold text-foreground">Gestión de Usuarios</h2>
+                    <p className="text-muted-foreground">Administración de usuarios del sistema.</p>
                 </div>
                 <Button
                     className="flex items-center gap-2"
@@ -136,7 +136,7 @@ export default function UsuariosPage() {
 
             <div className="flex flex-col md:flex-row gap-4">
                 <div className="relative flex-1">
-                    <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" size={18} />
+                    <LucideSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground" size={18} />
                     <Input
                         className="pl-10"
                         placeholder="Buscar por nombre, email, cédula o dependencia..."
@@ -156,33 +156,33 @@ export default function UsuariosPage() {
                                     {usuario.rol}
                                 </span>
                             </div>
-                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${usuario.activo ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'}`}>
+                            <span className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${usuario.activo ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'}`}>
                                 {usuario.activo ? 'Activo' : 'Inactivo'}
                             </span>
                         </div>
 
                         <div className="flex items-center gap-3 mb-4">
-                            <div className="w-12 h-12 bg-gray-100 rounded-full flex items-center justify-center text-gray-600 font-bold">
+                            <div className="w-12 h-12 bg-muted rounded-full flex items-center justify-center text-muted-foreground font-bold">
                                 {usuario.nombre.substring(0, 2).toUpperCase()}
                             </div>
                             <div>
-                                <h3 className="font-bold text-gray-900">{usuario.nombre}</h3>
-                                <p className="text-sm text-gray-500">{usuario.cargo}</p>
+                                <h3 className="font-bold text-foreground">{usuario.nombre}</h3>
+                                <p className="text-sm text-muted-foreground">{usuario.cargo}</p>
                             </div>
                         </div>
 
                         <div className="space-y-2 mb-6">
                             <div className="flex justify-between text-xs">
-                                <span className="text-gray-400">Email:</span>
-                                <span className="text-gray-700 font-medium truncate ml-2">{usuario.email}</span>
+                                <span className="text-muted-foreground">Email:</span>
+                                <span className="text-foreground font-medium truncate ml-2">{usuario.email}</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                                <span className="text-gray-400">Cédula:</span>
-                                <span className="text-gray-700 font-medium">{usuario.cedula}</span>
+                                <span className="text-muted-foreground">Cédula:</span>
+                                <span className="text-foreground font-medium">{usuario.cedula}</span>
                             </div>
                             <div className="flex justify-between text-xs">
-                                <span className="text-gray-400">Dependencia:</span>
-                                <span className="text-gray-700 font-medium">{usuario.dependencia}</span>
+                                <span className="text-muted-foreground">Dependencia:</span>
+                                <span className="text-foreground font-medium">{usuario.dependencia}</span>
                             </div>
                         </div>
 
@@ -197,8 +197,8 @@ export default function UsuariosPage() {
                             <Button
                                 variant="outline"
                                 className={`flex-1 text-xs ${usuario.activo
-                                    ? 'text-red-600 hover:text-red-700 hover:bg-red-50'
-                                    : 'text-green-600 hover:text-green-700 hover:bg-green-50'
+                                    ? 'text-rose-700 hover:text-rose-800 hover:bg-rose-50 border-rose-200'
+                                    : 'text-emerald-700 hover:text-emerald-800 hover:bg-emerald-50 border-emerald-200'
                                     }`}
                                 onClick={() => handleToggleActivo(usuario)}
                                 disabled={togglingId === usuario.id}
@@ -211,9 +211,9 @@ export default function UsuariosPage() {
             </div>
 
             {filteredUsuarios.length === 0 && (
-                <div className="text-center py-12 bg-white rounded-xl border">
-                    <LucideUser className="mx-auto text-gray-300 mb-4" size={48} />
-                    <p className="text-gray-500">No se encontraron usuarios que coincidan con la búsqueda.</p>
+                <div className="text-center py-12 bg-card rounded-xl border border-border">
+                    <LucideUser className="mx-auto text-muted-foreground mb-4" size={48} />
+                    <p className="text-muted-foreground">No se encontraron usuarios que coincidan con la búsqueda.</p>
                 </div>
             )}
 

@@ -52,7 +52,7 @@ export default function RevisionesPage() {
     const getEstadoBadge = (estado: string) => {
         switch (estado) {
             case 'borrador':
-                return <span className="bg-gray-100 text-gray-700 px-2 py-1 rounded text-[10px] uppercase font-bold">Borrador</span>;
+                return <span className="bg-muted text-muted-foreground px-2 py-1 rounded text-[10px] uppercase font-bold">Borrador</span>;
             case 'pendiente_firma_custodio':
                 return <span className="bg-orange-100 text-orange-700 px-2 py-1 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Pendiente Firma</span>;
             case 'firmada_completa':
@@ -62,7 +62,7 @@ export default function RevisionesPage() {
             case 'error_generacion':
                 return <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] uppercase font-bold">Error al generar</span>;
             default:
-                return <span className="bg-red-100 text-red-700 px-2 py-1 rounded text-[10px] uppercase font-bold text-center">{estado}</span>;
+                return <span className="bg-muted text-muted-foreground px-2 py-1 rounded text-[10px] uppercase font-bold text-center">{estado}</span>;
         }
     };
 
@@ -78,8 +78,8 @@ export default function RevisionesPage() {
         <div className="space-y-6">
             <div className="flex justify-between items-center">
                 <div>
-                    <h2 className="text-2xl font-bold text-gray-900">Historial de Revisiones</h2>
-                    <p className="text-gray-500">
+                    <h2 className="text-2xl font-bold text-foreground">Historial de Revisiones</h2>
+                    <p className="text-muted-foreground">
                         {isCustodio()
                             ? 'Revisiones pendientes de tu firma.'
                             : `Mostrando ${revisiones.length} revisiones.`}
@@ -93,20 +93,20 @@ export default function RevisionesPage() {
                         <Card className="p-4 hover:shadow-md transition-shadow cursor-pointer border-l-4 border-l-primary/20">
                             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                                 <div className="flex items-center gap-4">
-                                    <div className="w-12 h-12 bg-gray-50 rounded-lg flex items-center justify-center text-primary border">
+                                    <div className="w-12 h-12 bg-muted rounded-lg flex items-center justify-center text-primary border border-border">
                                         <LucideFileText size={24} />
                                     </div>
                                     <div>
                                         <div className="flex items-center gap-2 mb-1">
-                                            <p className="font-bold text-gray-900">
+                                            <p className="font-bold text-foreground">
                                                 {revision.numeroActa || `PRE-ACTA (${revision.id.substring(0, 8)})`}
                                             </p>
                                             {getEstadoBadge(revision.estado)}
                                         </div>
-                                        <p className="text-sm text-gray-600">
+                                        <p className="text-sm text-muted-foreground">
                                             <span className="font-medium">{revision.codigoActivo}</span> - {revision.descripcionActivo}
                                         </p>
-                                        <p className="text-xs text-gray-400 mt-1">
+                                        <p className="text-xs text-muted-foreground mt-1">
                                             Fecha: {formatDate(revision.fecha)} | Custodio: {revision.custodioNombre}
                                         </p>
                                     </div>
@@ -114,7 +114,7 @@ export default function RevisionesPage() {
 
                                 <div className="flex items-center gap-4">
                                     <div className="text-right hidden md:block">
-                                        <p className="text-xs text-gray-400 uppercase font-bold tracking-wider">Estado Activo</p>
+                                        <p className="text-xs text-muted-foreground uppercase font-bold tracking-wider">Estado Activo</p>
                                         <p className="text-sm font-bold capitalize text-primary">{revision.estadoActivo}</p>
                                     </div>
                                     <Button variant="outline" size="sm">
@@ -127,14 +127,14 @@ export default function RevisionesPage() {
                 ))}
 
                 {revisiones.length === 0 && (
-                    <div className="text-center py-20 bg-white rounded-xl border border-dashed">
-                        <LucideFileText className="mx-auto text-gray-300 mb-4" size={48} />
-                        <p className="text-gray-500 font-medium">No se encontraron revisiones.</p>
+                    <div className="text-center py-20 bg-card rounded-xl border border-dashed border-border">
+                        <LucideFileText className="mx-auto text-muted-foreground mb-4" size={48} />
+                        <p className="text-muted-foreground font-medium">No se encontraron revisiones.</p>
                         {isLogistica() && (
-                            <p className="text-sm text-gray-400 mt-1">Inicie una revisión desde la lista de activos.</p>
+                            <p className="text-sm text-muted-foreground mt-1">Inicie una revisión desde la lista de activos.</p>
                         )}
                         {isCustodio() && (
-                            <p className="text-sm text-gray-400 mt-1">No tiene revisiones pendientes de firma.</p>
+                            <p className="text-sm text-muted-foreground mt-1">No tiene revisiones pendientes de firma.</p>
                         )}
                     </div>
                 )}

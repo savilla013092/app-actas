@@ -32,7 +32,7 @@ export function EvidenciasUploader({ evidencias, onChange, maxFiles }: Evidencia
         <div className="space-y-4">
             <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
                 {evidencias.map((file, index) => (
-                    <div key={index} className="relative aspect-square border rounded-lg overflow-hidden group">
+                    <div key={index} className="relative aspect-square border border-border rounded-lg overflow-hidden group">
                         <img
                             src={URL.createObjectURL(file)}
                             alt={`Evidencia ${index + 1}`}
@@ -47,9 +47,9 @@ export function EvidenciasUploader({ evidencias, onChange, maxFiles }: Evidencia
                     </div>
                 ))}
                 {evidencias.length < maxFiles && (
-                    <label className="aspect-square border-2 border-dashed rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition-colors">
-                        <LucideImage size={32} className="text-gray-400 mb-2" />
-                        <span className="text-sm text-gray-500">Subir foto</span>
+                    <label className="aspect-square border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center cursor-pointer hover:bg-muted transition-colors">
+                        <LucideImage size={32} className="text-muted-foreground mb-2" />
+                        <span className="text-sm text-muted-foreground">Subir foto</span>
                         <input
                             type="file"
                             accept="image/*"

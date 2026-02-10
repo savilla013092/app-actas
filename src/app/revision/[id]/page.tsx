@@ -106,11 +106,11 @@ export default function RevisionDetailPage() {
             <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div>
                     <div className="flex items-center gap-3 mb-1">
-                        <h2 className="text-2xl font-bold text-gray-900">
+                        <h2 className="text-2xl font-bold text-foreground">
                             {revision.numeroActa || 'Revisión en Proceso'}
                         </h2>
                     </div>
-                    <p className="text-gray-500 font-mono text-sm uppercase tracking-wider">{revision.id}</p>
+                    <p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">{revision.id}</p>
                 </div>
 
                 <div className="flex gap-2">
@@ -132,55 +132,55 @@ export default function RevisionDetailPage() {
                 <Card className="md:col-span-2 p-6 space-y-8">
                     {/* Información del Activo */}
                     <section>
-                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2">
+                        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideBox size={20} className="text-primary" />
                             Información del Activo
                         </h3>
                         <div className="grid grid-cols-2 gap-y-4 gap-x-8">
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Código</p>
-                                <p className="text-gray-900 font-medium">{revision.codigoActivo}</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Código</p>
+                                <p className="text-foreground font-medium">{revision.codigoActivo}</p>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Ubicación</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Ubicación</p>
                                 <div className="flex items-center gap-1">
-                                    <LucideMapPin size={14} className="text-gray-400" />
-                                    <p className="text-gray-900 font-medium">{revision.ubicacionActivo}</p>
+                                    <LucideMapPin size={14} className="text-muted-foreground" />
+                                    <p className="text-foreground font-medium">{revision.ubicacionActivo}</p>
                                 </div>
                             </div>
                             <div className="col-span-2">
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider">Descripción</p>
-                                <p className="text-gray-900 font-medium">{revision.descripcionActivo}</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider">Descripción</p>
+                                <p className="text-foreground font-medium">{revision.descripcionActivo}</p>
                             </div>
                         </div>
                     </section>
 
                     {/* Resultado de la Revisión */}
                     <section>
-                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2">
+                        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideFileText size={20} className="text-primary" />
                             Resultado de la Revisión
                         </h3>
                         <div className="space-y-4">
                             <div className="flex items-center gap-4">
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider shrink-0">Estado del Activo:</p>
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider shrink-0">Estado del Activo:</p>
                                 <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${revision.estadoActivo === 'excelente' || revision.estadoActivo === 'bueno'
-                                        ? 'bg-green-100 text-green-700'
-                                        : 'bg-red-100 text-red-700'
+                                        ? 'bg-emerald-100 text-emerald-800'
+                                        : 'bg-rose-100 text-rose-800'
                                     }`}>
                                     {revision.estadoActivo}
                                 </span>
                             </div>
                             <div>
-                                <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Descripción de hallazgos</p>
-                                <div className="bg-gray-50 p-4 rounded-lg text-gray-700 text-sm italic leading-relaxed">
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Descripción de hallazgos</p>
+                                <div className="bg-muted p-4 rounded-lg text-foreground text-sm italic leading-relaxed border border-border">
                                     &ldquo;{revision.descripcion}&rdquo;
                                 </div>
                             </div>
                             {revision.observaciones && (
                                 <div>
-                                    <p className="text-xs text-gray-400 font-bold uppercase tracking-wider mb-1">Observaciones</p>
-                                    <p className="text-sm text-gray-600">{revision.observaciones}</p>
+                                    <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Observaciones</p>
+                                    <p className="text-sm text-muted-foreground">{revision.observaciones}</p>
                                 </div>
                             )}
                         </div>
@@ -188,12 +188,12 @@ export default function RevisionDetailPage() {
 
                     {/* Evidencias */}
                     <section>
-                        <h3 className="text-lg font-bold text-gray-900 mb-4 flex items-center gap-2 border-b pb-2">
+                        <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             Registro Fotográfico
                         </h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {revision.evidencias.map((ev, idx) => (
-                                <div key={idx} className="aspect-square rounded-lg overflow-hidden border bg-gray-100">
+                                <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-border bg-muted">
                                     <img src={ev.url} alt={ev.nombre} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
                                 </div>
                             ))}
@@ -204,7 +204,7 @@ export default function RevisionDetailPage() {
                 {/* Sidebar Info */}
                 <div className="space-y-6">
                     <Card className="p-6">
-                        <h3 className="font-bold text-gray-900 mb-4 border-b pb-2 flex items-center gap-2">
+                        <h3 className="font-bold text-foreground mb-4 border-b border-border pb-2 flex items-center gap-2">
                             <LucideUser size={18} className="text-primary" />
                             Firmas y Estados
                         </h3>
@@ -212,7 +212,7 @@ export default function RevisionDetailPage() {
                         <div className="space-y-6">
                             {/* Proceso */}
                             <div>
-                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Estado del Proceso</p>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">Estado del Proceso</p>
                                 <div className="flex items-center gap-2">
                                     {revision.estado === 'completada' ? (
                                         <LucideCheckCircle className="text-green-500" size={20} />
@@ -225,9 +225,9 @@ export default function RevisionDetailPage() {
 
                             {/* Revisor */}
                             <div className="pt-4 border-t">
-                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Profesional Revisor</p>
-                                <p className="text-sm font-bold text-gray-900">{revision.revisorNombre}</p>
-                                <p className="text-xs text-gray-500">Logística</p>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">Profesional Revisor</p>
+                                <p className="text-sm font-bold text-foreground">{revision.revisorNombre}</p>
+                                <p className="text-xs text-muted-foreground">Logística</p>
                                 {revision.firmaRevisor ? (
                                     <div className="mt-2 flex items-center gap-2 text-green-600">
                                         <LucideCheckCircle size={14} />
@@ -240,9 +240,9 @@ export default function RevisionDetailPage() {
 
                             {/* Custodio */}
                             <div className="pt-4 border-t">
-                                <p className="text-[10px] text-gray-400 font-bold uppercase tracking-wider mb-2">Custodio Responsable</p>
-                                <p className="text-sm font-bold text-gray-900">{revision.custodioNombre}</p>
-                                <p className="text-xs text-gray-500">Dependencia: {revision.ubicacionActivo}</p>
+                                <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">Custodio Responsable</p>
+                                <p className="text-sm font-bold text-foreground">{revision.custodioNombre}</p>
+                                <p className="text-xs text-muted-foreground">Dependencia: {revision.ubicacionActivo}</p>
                                 {revision.firmaCustodio ? (
                                     <div className="mt-2 flex items-center gap-2 text-green-600">
                                         <LucideCheckCircle size={14} />

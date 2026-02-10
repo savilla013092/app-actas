@@ -12,8 +12,9 @@ import { Card } from '@/components/ui/card';
 import { useAuth } from '@/hooks/useAuth';
 import { crearUsuario, actualizarUsuario } from '@/services/usuarioService';
 import { Usuario, RolUsuario } from '@/types/usuario';
-import { createUserWithEmailAndPassword } from 'firebase/auth';
-import { auth } from '@/lib/firebase/config';
+import { createUserWithEmailAndPassword, getAuth, signOut } from 'firebase/auth';
+import { initializeApp, getApps } from 'firebase/app';
+import app from '@/lib/firebase/config';
 import { LucideX } from 'lucide-react';
 
 const usuarioSchema = z.object({
@@ -64,6 +65,11 @@ export function UsuarioForm({ usuario, onSuccess, onCancel }: UsuarioFormProps) 
     const [loading, setLoading] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const isEditing = !!usuario;
+    const getSecondaryAuth = () => {
+        const existing = getApps().find((firebaseApp) => firebaseApp.name === 'secondary');
+        const secondaryApp = existing ?? initializeApp(app.options, 'secondary');
+        return getAuth(secondaryApp);
+    };
 
     const { register, handleSubmit, formState: { errors } } = useForm<UsuarioFormData>({
         resolver: zodResolver(usuarioSchema),
@@ -82,7 +88,10 @@ export function UsuarioForm({ usuario, onSuccess, onCancel }: UsuarioFormProps) 
     });
 
     const onSubmit = async (data: UsuarioFormData) => {
-        if (!user?.usuario) return;
+        if (!user?.usuario) {
+            setError('No se pudo cargar su perfil. Cierre sesion e ingrese nuevamente.');
+            return;
+        }
         setLoading(true);
         setError(null);
 
@@ -105,8 +114,9 @@ export function UsuarioForm({ usuario, onSuccess, onCancel }: UsuarioFormProps) 
                     return;
                 }
 
+                const secondaryAuth = getSecondaryAuth();
                 const userCredential = await createUserWithEmailAndPassword(
-                    auth,
+                    secondaryAuth,
                     data.email,
                     data.password
                 );
@@ -123,6 +133,7 @@ export function UsuarioForm({ usuario, onSuccess, onCancel }: UsuarioFormProps) 
                     activo: true,
                     creadoPor: user.uid,
                 });
+                await signOut(secondaryAuth);
             }
 
             onSuccess();
@@ -148,10 +159,10 @@ export function UsuarioForm({ usuario, onSuccess, onCancel }: UsuarioFormProps) 
     return (
         <Card className="p-6 max-h-[90vh] overflow-y-auto">
             <div className="flex justify-between items-center mb-6">
-                <h2 className="text-xl font-bold text-gray-900">
+                <h2 className="text-xl font-bold text-foreground">
                     {isEditing ? 'Editar Usuario' : 'Nuevo Usuario'}
                 </h2>
-                <button onClick={onCancel} className="text-gray-400 hover:text-gray-600">
+                <button onClick={onCancel} className="text-muted-foreground hover:text-foreground">
                     <LucideX size={24} />
                 </button>
             </div>

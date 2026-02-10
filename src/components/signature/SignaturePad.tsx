@@ -61,11 +61,11 @@ export function SignaturePad({
     };
 
     return (
-        <div className="bg-white p-6 rounded-lg shadow-lg max-w-lg mx-auto">
+        <div className="bg-card p-6 rounded-lg shadow-lg max-w-lg mx-auto border border-border">
             <h3 className="text-lg font-semibold mb-4">{titulo}</h3>
 
             {permitirEdicion ? (
-                <div className="mb-4 p-3 bg-gray-50 rounded space-y-3">
+                <div className="mb-4 p-3 bg-muted rounded space-y-3 border border-border">
                     <div>
                         <Label htmlFor="nombre-firmante" className="text-sm font-medium">Nombre del Firmante *</Label>
                         <Input
@@ -88,15 +88,15 @@ export function SignaturePad({
                     </div>
                 </div>
             ) : (
-                <div className="mb-4 p-3 bg-gray-50 rounded">
+                <div className="mb-4 p-3 bg-muted rounded border border-border">
                     <p className="text-sm"><strong>Nombre:</strong> {nombreFirmante}</p>
                     <p className="text-sm"><strong>Cédula:</strong> {cedulaFirmante}</p>
                 </div>
             )}
 
             <div className="mb-4">
-                <p className="text-sm text-gray-600 mb-2">Dibuje su firma en el recuadro:</p>
-                <div className="border-2 border-gray-300 rounded">
+                <p className="text-sm text-muted-foreground mb-2">Dibuje su firma en el recuadro:</p>
+                <div className="border-2 border-border rounded bg-background">
                     <SignatureCanvas
                         ref={signatureRef}
                         penColor="black"
@@ -117,7 +117,7 @@ export function SignaturePad({
                         onChange={(e) => setAceptaDeclaracion(e.target.checked)}
                         className="mt-1"
                     />
-                    <span className="text-sm text-gray-700">{declaracion}</span>
+                    <span className="text-sm text-foreground">{declaracion}</span>
                 </label>
             </div>
 

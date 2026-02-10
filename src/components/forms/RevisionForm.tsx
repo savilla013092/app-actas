@@ -149,7 +149,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
                                 ? 'text-green-600'
                                 : paso === ['formulario', 'evidencias', 'firma'][index]
                                     ? 'text-blue-600'
-                                    : 'text-gray-400'
+                                    : 'text-muted-foreground'
                             }`}
                     >
                         <span className="w-8 h-8 rounded-full border-2 flex items-center justify-center mr-2">
@@ -163,7 +163,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
             {/* Paso 1: Formulario */}
             {paso === 'formulario' && (
                 <form onSubmit={handleSubmit(onSubmitFormulario)} className="space-y-6">
-                    <div className="bg-gray-50 p-4 rounded-lg mb-6">
+                    <div className="bg-muted p-4 rounded-lg mb-6 border border-border">
                         <h3 className="font-semibold mb-2">Activo a revisar</h3>
                         <p><strong>Código:</strong> {activo.codigo}</p>
                         <p><strong>Descripción:</strong> {activo.descripcion}</p>
@@ -219,7 +219,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
             {paso === 'evidencias' && (
                 <div className="space-y-6">
                     <h3 className="text-lg font-semibold">Subir evidencias fotográficas</h3>
-                    <p className="text-gray-600">
+                    <p className="text-muted-foreground">
                         Agregue fotografías del activo revisado. Mínimo 1, máximo 5 fotografías.
                     </p>
 

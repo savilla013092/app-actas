@@ -253,14 +253,14 @@ export default function ImportarPage() {
             </div>
 
             <div>
-                <h1 className="text-2xl font-bold text-gray-900">Importar Activos</h1>
-                <p className="text-gray-500">Importar activos desde archivo Excel (.xlsx)</p>
+                <h1 className="text-2xl font-bold text-foreground">Importar Activos</h1>
+                <p className="text-muted-foreground">Importar activos desde archivo Excel (.xlsx)</p>
             </div>
 
             <Card className="p-6">
                 <div className="space-y-4">
                     <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-2">
+                        <label className="block text-sm font-medium text-foreground mb-2">
                             Seleccionar archivo Excel
                         </label>
                         <input
@@ -268,7 +268,7 @@ export default function ImportarPage() {
                             accept=".xlsx,.xls"
                             onChange={handleFileChange}
                             disabled={loading}
-                            className="block w-full text-sm text-gray-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-white hover:file:bg-primary/90 disabled:opacity-50"
+                            className="block w-full text-sm text-muted-foreground file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-sm file:font-semibold file:bg-primary file:text-primary-foreground hover:file:bg-primary/90 disabled:opacity-50"
                         />
                     </div>
 
@@ -278,13 +278,13 @@ export default function ImportarPage() {
                                 <Spinner size="sm" />
                                 <span>Importando activos...</span>
                             </div>
-                            <div className="w-full bg-gray-200 rounded-full h-2.5">
+                            <div className="w-full bg-muted rounded-full h-2.5">
                                 <div
                                     className="bg-primary h-2.5 rounded-full transition-all duration-300"
                                     style={{ width: `${progress}%` }}
                                 />
                             </div>
-                            <p className="text-sm text-gray-500">{progress}% completado</p>
+                            <p className="text-sm text-muted-foreground">{progress}% completado</p>
                         </div>
                     )}
                 </div>
@@ -293,7 +293,7 @@ export default function ImportarPage() {
             {log.length > 0 && (
                 <Card className="p-6">
                     <h3 className="font-semibold mb-4">Log de Importación</h3>
-                    <div className="bg-gray-900 text-green-400 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto">
+                    <div className="bg-foreground text-emerald-300 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto">
                         {log.map((line, i) => (
                             <div key={i}>{line}</div>
                         ))}
