@@ -20,12 +20,12 @@ export default function ActivosPage() {
     const [showForm, setShowForm] = useState(false);
     const [editingActivo, setEditingActivo] = useState<Activo | null>(null);
 
-    const loadActivos = async () => {
+    const loadActivos = async (isCustodioRole: boolean) => {
         if (!user) return;
         setLoading(true);
         try {
             let items: Activo[];
-            if (isCustodio()) {
+            if (isCustodioRole) {
                 items = await obtenerActivosPorCustodio(user.uid);
             } else {
                 items = await obtenerTodosLosActivos();
@@ -38,14 +38,17 @@ export default function ActivosPage() {
         }
     };
 
+    const isCustodioRole = isCustodio();
+
     useEffect(() => {
-        loadActivos();
-    }, [user, isCustodio]);
+        if (!user) return;
+        loadActivos(isCustodioRole);
+    }, [user?.uid, isCustodioRole]);
 
     const handleFormSuccess = () => {
         setShowForm(false);
         setEditingActivo(null);
-        loadActivos();
+        loadActivos(isCustodioRole);
     };
 
     const handleEditActivo = (activo: Activo) => {
