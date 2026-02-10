@@ -66,6 +66,23 @@ const DEPENDENCIAS = [
     'Operaciones',
 ];
 
+const toDateInputValue = (value: unknown): string => {
+    if (!value) return '';
+    let date: Date | null = null;
+    if (value instanceof Date) {
+        date = value;
+    } else if (typeof value === 'string' || typeof value === 'number') {
+        const parsed = new Date(value);
+        if (!Number.isNaN(parsed.getTime())) date = parsed;
+    } else if (typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+        const parsed = (value as { toDate: () => Date }).toDate();
+        if (!Number.isNaN(parsed.getTime())) date = parsed;
+    }
+
+    if (!date || Number.isNaN(date.getTime())) return '';
+    return date.toISOString().split('T')[0];
+};
+
 export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
     const { user, isAdmin, isLogistica } = useAuth();
     const [loading, setLoading] = useState(false);
@@ -88,7 +105,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             custodioId: activo.custodioId,
             estado: activo.estado,
             valorAdquisicion: activo.valorAdquisicion?.toString() || '',
-            fechaAdquisicion: activo.fechaAdquisicion ? new Date(activo.fechaAdquisicion).toISOString().split('T')[0] : '',
+            fechaAdquisicion: toDateInputValue(activo.fechaAdquisicion),
             observaciones: activo.observaciones || '',
         } : {
             estado: 'activo',
