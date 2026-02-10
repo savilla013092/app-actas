@@ -98,20 +98,35 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
     });
 
     useEffect(() => {
+        let cancelled = false;
+        const timeoutId = setTimeout(() => {
+            if (cancelled) return;
+            console.warn('Carga de custodios lenta o bloqueada. Continuando sin custodios.');
+            setLoadingCustodios(false);
+            setError(prev => prev ?? 'No se pudieron cargar custodios. Puedes crear el activo sin asignar custodio.');
+        }, 8000);
+
         async function loadCustodios() {
             try {
                 const usuarios = await obtenerTodosLosUsuarios();
+                if (cancelled) return;
                 // Mostrar todos los usuarios activos (cualquiera puede ser custodio de un activo)
                 const usuariosActivos = usuarios.filter(u => u.activo);
                 setCustodios(usuariosActivos);
             } catch (error) {
+                if (cancelled) return;
                 console.error('Error loading custodios:', error);
                 setCustodios([]);
             } finally {
-                setLoadingCustodios(false);
+                if (!cancelled) setLoadingCustodios(false);
+                clearTimeout(timeoutId);
             }
         }
         loadCustodios();
+        return () => {
+            cancelled = true;
+            clearTimeout(timeoutId);
+        };
     }, []);
 
     const onSubmit = async (data: ActivoFormData) => {
@@ -181,16 +196,6 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             setLoading(false);
         }
     };
-
-    if (loadingCustodios) {
-        return (
-            <Card className="p-6">
-                <div className="flex justify-center items-center h-32">
-                    <Spinner size="lg" />
-                </div>
-            </Card>
-        );
-    }
 
     return (
         <Card className="p-6 max-h-[90vh] overflow-y-auto">
@@ -279,8 +284,10 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
                         <Label htmlFor="custodioId">Custodio Responsable *</Label>
-                        <Select {...register('custodioId')}>
-                            <option value="">Seleccione un custodio</option>
+                        <Select {...register('custodioId')} disabled={loadingCustodios}>
+                            <option value="">
+                                {loadingCustodios ? 'Cargando custodios...' : 'Seleccione un custodio'}
+                            </option>
                             {custodios.map(custodio => (
                                 <option key={custodio.id} value={custodio.id}>
                                     {custodio.nombre} - {custodio.cedula}
