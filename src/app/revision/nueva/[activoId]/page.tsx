@@ -10,9 +10,8 @@ import { Usuario } from '@/types/usuario';
 import { RevisionForm } from '@/components/forms/RevisionForm';
 import { Spinner } from '@/components/ui/spinner';
 import { Card } from '@/components/ui/card';
-import { Button } from '@/components/ui/button';
-import { LucideArrowLeft, LucideHome } from 'lucide-react';
-import Link from 'next/link';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LucideBox, LucideClipboardCheck } from 'lucide-react';
 
 export default function NuevaRevisionPage() {
     const { activoId } = useParams();
@@ -29,7 +28,6 @@ export default function NuevaRevisionPage() {
                 const activoData = await obtenerActivo(activoId as string);
                 setActivo(activoData);
 
-                // Cargar datos completos del custodio
                 if (activoData?.custodioId) {
                     const custodioData = await obtenerUsuario(activoData.custodioId);
                     setCustodio(custodioData);
@@ -63,7 +61,6 @@ export default function NuevaRevisionPage() {
         );
     }
 
-    // Solo logística o admin pueden crear revisiones
     if (!isLogistica() && !isAdmin()) {
         return (
             <div className="text-center py-12">
@@ -72,7 +69,6 @@ export default function NuevaRevisionPage() {
         );
     }
 
-    // Preparar datos del custodio
     const custodioData = {
         id: activo.custodioId,
         nombre: custodio?.nombre || activo.custodioNombre,
@@ -80,32 +76,22 @@ export default function NuevaRevisionPage() {
         cargo: custodio?.cargo || 'Custodio asignado'
     };
 
+    const breadcrumbItems = [
+        { label: 'Activos', href: '/activos', icon: <LucideBox size={14} /> },
+        { label: activo.codigo, href: `/activos/${activo.id}` },
+        { label: 'Nueva Revisión', icon: <LucideClipboardCheck size={14} /> },
+    ];
+
     return (
-        <div className="space-y-6">
-            <div className="flex items-center gap-4 mb-2">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.back()}
-                    className="flex items-center gap-2"
-                >
-                    <LucideArrowLeft size={16} />
-                    Atrás
-                </Button>
-                <Link href="/dashboard">
-                    <Button variant="outline" size="sm" className="flex items-center gap-2">
-                        <LucideHome size={16} />
-                        Inicio
-                    </Button>
-                </Link>
-            </div>
+        <div className="space-y-6 max-w-4xl mx-auto">
+            <PageHeader
+                title="Nueva Revisión de Activo"
+                subtitle={`${activo.codigo} - ${activo.descripcion}`}
+                breadcrumbItems={breadcrumbItems}
+                backHref={`/activos/${activo.id}`}
+            />
 
-            <div className="mb-8">
-                <h2 className="text-2xl font-bold text-foreground">Nueva Revisión de Activo</h2>
-                <p className="text-muted-foreground">Complete los pasos para registrar el estado actual del activo.</p>
-            </div>
-
-            <Card className="p-8">
+            <Card className="p-6 md:p-8 shadow-elegant border-border/50">
                 <RevisionForm
                     activo={activo}
                     custodio={custodioData}

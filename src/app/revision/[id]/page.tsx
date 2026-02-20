@@ -8,7 +8,9 @@ import { Revision } from '@/types/revision';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
+import { Badge } from '@/components/ui/badge';
 import { SignaturePad } from '@/components/signature/SignaturePad';
+import { PageHeader } from '@/components/layout/PageHeader';
 import {
     LucideFileText,
     LucideDownload,
@@ -17,15 +19,13 @@ import {
     LucideUser,
     LucideBox,
     LucideMapPin,
-    LucideArrowLeft,
-    LucideHome
+    LucidePenTool
 } from 'lucide-react';
-import Link from 'next/link';
 
 export default function RevisionDetailPage() {
     const { id } = useParams();
     const router = useRouter();
-    const { user, isCustodio, isAdmin } = useAuth();
+    const { user, isCustodio, isAdmin, isLogistica } = useAuth();
     const [revision, setRevision] = useState<Revision | null>(null);
     const [loading, setLoading] = useState(true);
     const [signing, setSigning] = useState(false);
@@ -51,7 +51,6 @@ export default function RevisionDetailPage() {
         setSigning(true);
         try {
             await firmarComoCustodio(revision.id, firmaDataUrl, revision, datosFirmante);
-            // Reload page data
             const updated = await obtenerRevision(revision.id);
             setRevision(updated);
             setShowSignaturePad(false);
@@ -75,62 +74,58 @@ export default function RevisionDetailPage() {
         return <div className="text-center py-12 text-red-500">Revisión no encontrada.</div>;
     }
 
-    // Permitir firmar si:
-    // 1. Es custodio y el activo está asignado a él, O
-    // 2. Es admin (para pruebas y gestión)
     const canSign = revision.estado === 'pendiente_firma_custodio' && (
         (isCustodio() && revision.custodioId === user?.uid) ||
         isAdmin()
     );
 
+    const breadcrumbItems = [
+        { label: 'Revisiones', href: '/revision', icon: <LucideFileText size={14} /> },
+        { label: revision.numeroActa || 'Revisión' },
+    ];
+
+    const actions = [];
+    
+    if (revision.actaPdfUrl) {
+        actions.push({
+            label: 'Descargar PDF',
+            onClick: () => window.open(revision.actaPdfUrl, '_blank'),
+            icon: <LucideDownload size={18} />,
+            variant: 'default' as const,
+        });
+    }
+    
+    if (canSign) {
+        actions.push({
+            label: 'Firmar Acta',
+            onClick: () => setShowSignaturePad(true),
+            icon: <LucidePenTool size={18} />,
+            variant: 'warning' as const,
+        });
+    }
+
+    const getEstadoBadgeVariant = () => {
+        switch (revision.estado) {
+            case 'completada': return 'completed';
+            case 'pendiente_firma_custodio': return 'pending';
+            case 'firmada_completa': return 'info';
+            case 'borrador': return 'secondary';
+            default: return 'outline';
+        }
+    };
+
     return (
         <div className="space-y-8 max-w-4xl mx-auto">
-            <div className="flex items-center gap-4">
-                <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => router.back()}
-                    className="flex items-center gap-2"
-                >
-                    <LucideArrowLeft size={16} />
-                    Atrás
-                </Button>
-                <Link href="/dashboard">
-                    <Button variant="outline" size="sm" className="flex items-center gap-2">
-                        <LucideHome size={16} />
-                        Inicio
-                    </Button>
-                </Link>
-            </div>
-
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <div className="flex items-center gap-3 mb-1">
-                        <h2 className="text-2xl font-bold text-foreground">
-                            {revision.numeroActa || 'Revisión en Proceso'}
-                        </h2>
-                    </div>
-                    <p className="text-muted-foreground font-mono text-sm uppercase tracking-wider">{revision.id}</p>
-                </div>
-
-                <div className="flex gap-2">
-                    {revision.actaPdfUrl && (
-                        <Button className="flex items-center gap-2" onClick={() => window.open(revision.actaPdfUrl, '_blank')}>
-                            <LucideDownload size={18} />
-                            Descargar Acta PDF
-                        </Button>
-                    )}
-                    {canSign && (
-                        <Button onClick={() => setShowSignaturePad(true)} className="bg-orange-600 hover:bg-orange-700">
-                            Firmar Acta
-                        </Button>
-                    )}
-                </div>
-            </div>
+            <PageHeader
+                title={revision.numeroActa || 'Revisión en Proceso'}
+                subtitle={`ID: ${revision.id.substring(0, 8).toUpperCase()}`}
+                breadcrumbItems={breadcrumbItems}
+                backHref="/revision"
+                actions={actions}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="md:col-span-2 p-6 space-y-8">
-                    {/* Información del Activo */}
+                <Card className="md:col-span-2 p-6 space-y-8 shadow-elegant border-border/50">
                     <section>
                         <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideBox size={20} className="text-primary" />
@@ -155,7 +150,6 @@ export default function RevisionDetailPage() {
                         </div>
                     </section>
 
-                    {/* Resultado de la Revisión */}
                     <section>
                         <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideFileText size={20} className="text-primary" />
@@ -164,16 +158,15 @@ export default function RevisionDetailPage() {
                         <div className="space-y-4">
                             <div className="flex items-center gap-4">
                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider shrink-0">Estado del Activo:</p>
-                                <span className={`px-3 py-1 rounded-full text-xs font-bold uppercase ${revision.estadoActivo === 'excelente' || revision.estadoActivo === 'bueno'
-                                        ? 'bg-emerald-100 text-emerald-800'
-                                        : 'bg-rose-100 text-rose-800'
-                                    }`}>
+                                <Badge 
+                                    variant={revision.estadoActivo === 'excelente' || revision.estadoActivo === 'bueno' ? 'success' : 'warning'}
+                                >
                                     {revision.estadoActivo}
-                                </span>
+                                </Badge>
                             </div>
                             <div>
-                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Descripción de hallazgos</p>
-                                <div className="bg-muted p-4 rounded-lg text-foreground text-sm italic leading-relaxed border border-border">
+                                <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-2">Descripción de hallazgos</p>
+                                <div className="bg-muted/50 p-4 rounded-xl text-foreground text-sm italic leading-relaxed border border-border/50">
                                     &ldquo;{revision.descripcion}&rdquo;
                                 </div>
                             </div>
@@ -186,14 +179,13 @@ export default function RevisionDetailPage() {
                         </div>
                     </section>
 
-                    {/* Evidencias */}
                     <section>
                         <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             Registro Fotográfico
                         </h3>
                         <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
                             {revision.evidencias.map((ev, idx) => (
-                                <div key={idx} className="aspect-square rounded-lg overflow-hidden border border-border bg-muted">
+                                <div key={idx} className="aspect-square rounded-xl overflow-hidden border border-border/50 bg-muted shadow-elegant hover-lift">
                                     <img src={ev.url} alt={ev.nombre} className="w-full h-full object-cover hover:scale-110 transition-transform duration-500" />
                                 </div>
                             ))}
@@ -201,16 +193,14 @@ export default function RevisionDetailPage() {
                     </section>
                 </Card>
 
-                {/* Sidebar Info */}
                 <div className="space-y-6">
-                    <Card className="p-6">
+                    <Card className="p-6 shadow-elegant border-border/50">
                         <h3 className="font-bold text-foreground mb-4 border-b border-border pb-2 flex items-center gap-2">
                             <LucideUser size={18} className="text-primary" />
                             Firmas y Estados
                         </h3>
 
                         <div className="space-y-6">
-                            {/* Proceso */}
                             <div>
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">Estado del Proceso</p>
                                 <div className="flex items-center gap-2">
@@ -219,11 +209,12 @@ export default function RevisionDetailPage() {
                                     ) : (
                                         <LucideClock className="text-orange-500 animate-pulse" size={20} />
                                     )}
-                                    <span className="font-bold text-sm capitalize">{revision.estado.replace(/_/g, ' ')}</span>
+                                    <Badge variant={getEstadoBadgeVariant()}>
+                                        {revision.estado.replace(/_/g, ' ')}
+                                    </Badge>
                                 </div>
                             </div>
 
-                            {/* Revisor */}
                             <div className="pt-4 border-t">
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">Profesional Revisor</p>
                                 <p className="text-sm font-bold text-foreground">{revision.revisorNombre}</p>
@@ -234,11 +225,10 @@ export default function RevisionDetailPage() {
                                         <span className="text-[10px] font-bold uppercase">Firmado</span>
                                     </div>
                                 ) : (
-                                    <span className="text-[10px] text-red-500 font-bold uppercase mt-1 block">Pendiente</span>
+                                    <Badge variant="error" size="sm" className="mt-2">Pendiente</Badge>
                                 )}
                             </div>
 
-                            {/* Custodio */}
                             <div className="pt-4 border-t">
                                 <p className="text-[10px] text-muted-foreground font-bold uppercase tracking-wider mb-2">Custodio Responsable</p>
                                 <p className="text-sm font-bold text-foreground">{revision.custodioNombre}</p>
@@ -249,7 +239,7 @@ export default function RevisionDetailPage() {
                                         <span className="text-[10px] font-bold uppercase">Firmado</span>
                                     </div>
                                 ) : (
-                                    <span className="text-[10px] text-orange-500 font-bold uppercase mt-1 block">Esperando Firma</span>
+                                    <Badge variant="pending" size="sm" className="mt-2">Esperando Firma</Badge>
                                 )}
                             </div>
                         </div>
@@ -257,10 +247,9 @@ export default function RevisionDetailPage() {
                 </div>
             </div>
 
-            {/* Signature Modal Override */}
             {showSignaturePad && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-                    <div className="w-full max-w-xl">
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm p-4">
+                    <div className="w-full max-w-xl animate-scale-in">
                         <SignaturePad
                             titulo="Firma del Custodio del Activo"
                             nombreFirmante={revision.custodioNombre || user?.usuario?.nombre || ''}

@@ -10,7 +10,9 @@ import { Revision } from '@/types/revision';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Spinner } from '@/components/ui/spinner';
-import { LucideBox, LucideHistory, LucideArrowLeft, LucideUser, LucideMapPin, LucideFileText, LucideCheckCircle, LucideClock } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
+import { PageHeader } from '@/components/layout/PageHeader';
+import { LucideBox, LucideHistory, LucideUser, LucideMapPin, LucideFileText, LucideClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
 
 export default function ActivoDetailPage() {
@@ -54,13 +56,13 @@ export default function ActivoDetailPage() {
     const getEstadoBadge = (estado: string) => {
         switch (estado) {
             case 'completada':
-                return <span className="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideCheckCircle size={10} /> Completada</span>;
+                return <Badge variant="completed" size="sm" icon={<LucideFileText size={10} />}>Completada</Badge>;
             case 'pendiente_firma_custodio':
-                return <span className="bg-orange-100 text-orange-700 px-2 py-0.5 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Pendiente</span>;
+                return <Badge variant="pending" size="sm">Pendiente</Badge>;
             case 'firmada_completa':
-                return <span className="bg-blue-100 text-blue-700 px-2 py-0.5 rounded text-[10px] uppercase font-bold flex items-center gap-1"><LucideClock size={10} /> Procesando</span>;
+                return <Badge variant="info" size="sm">Procesando</Badge>;
             default:
-                return <span className="bg-muted text-muted-foreground px-2 py-0.5 rounded text-[10px] uppercase font-bold">{estado}</span>;
+                return <Badge variant="secondary" size="sm">{estado}</Badge>;
         }
     };
 
@@ -76,30 +78,31 @@ export default function ActivoDetailPage() {
         return <div className="text-center py-12 text-red-500">Activo no encontrado.</div>;
     }
 
+    const breadcrumbItems = [
+        { label: 'Activos', href: '/activos', icon: <LucideBox size={14} /> },
+        { label: activo.codigo },
+    ];
+
+    const actions = (isLogistica() || isAdmin()) ? [
+        {
+            label: 'Realizar Revisión',
+            href: `/revision/nueva/${activo.id}`,
+            icon: <LucideClipboardCheck size={18} />,
+        },
+    ] : [];
+
     return (
         <div className="space-y-6 max-w-4xl mx-auto">
-            <Link href="/activos" className="flex items-center gap-2 text-primary hover:underline text-sm font-medium">
-                <LucideArrowLeft size={16} />
-                Volver al Inventario
-            </Link>
-
-            <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-                <div>
-                    <h2 className="text-2xl font-bold text-foreground">{activo.descripcion}</h2>
-                    <p className="text-muted-foreground font-mono text-sm">{activo.codigo}</p>
-                </div>
-
-                <div className="flex gap-2">
-                    {(isLogistica() || isAdmin()) && (
-                        <Link href={`/revision/nueva/${activo.id}`}>
-                            <Button>Realizar Revisión</Button>
-                        </Link>
-                    )}
-                </div>
-            </div>
+            <PageHeader
+                title={activo.descripcion}
+                subtitle={`Código: ${activo.codigo}`}
+                breadcrumbItems={breadcrumbItems}
+                backHref="/activos"
+                actions={actions}
+            />
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-                <Card className="md:col-span-2 p-6 space-y-8">
+                <Card className="md:col-span-2 p-6 space-y-8 shadow-elegant border-border/50">
                     <section>
                         <h3 className="text-lg font-bold text-foreground mb-4 flex items-center gap-2 border-b border-border pb-2">
                             <LucideBox size={20} className="text-primary" />
@@ -112,9 +115,9 @@ export default function ActivoDetailPage() {
                             </div>
                             <div>
                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Estado</p>
-                                <span className="px-3 py-1 bg-emerald-100 text-emerald-800 text-xs font-bold rounded-full uppercase">
+                                <Badge variant={activo.estado === 'activo' ? 'success' : 'error'}>
                                     {activo.estado}
-                                </span>
+                                </Badge>
                             </div>
                             <div>
                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Marca / Modelo</p>
@@ -148,9 +151,9 @@ export default function ActivoDetailPage() {
                             <div className="space-y-3">
                                 {revisiones.map((revision) => (
                                     <Link key={revision.id} href={`/revision/${revision.id}`}>
-                                        <div className="flex items-center justify-between p-3 bg-muted rounded-lg hover:bg-muted/70 transition-colors cursor-pointer border border-border">
+                                        <div className="flex items-center justify-between p-4 bg-muted/50 rounded-xl hover:bg-muted transition-colors cursor-pointer border border-border/50">
                                             <div className="flex items-center gap-3">
-                                                <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-border">
+                                                <div className="w-10 h-10 bg-card rounded-lg flex items-center justify-center border border-border shadow-sm">
                                                     <LucideFileText size={18} className="text-primary" />
                                                 </div>
                                                 <div>
@@ -163,7 +166,7 @@ export default function ActivoDetailPage() {
                                                 </div>
                                             </div>
                                             <div className="flex items-center gap-2">
-                                                <span className="text-xs font-medium capitalize text-primary">{revision.estadoActivo}</span>
+                                                <Badge variant="default" size="sm">{revision.estadoActivo}</Badge>
                                                 {getEstadoBadge(revision.estado)}
                                             </div>
                                         </div>
@@ -179,7 +182,7 @@ export default function ActivoDetailPage() {
                     </section>
                 </Card>
 
-                <Card className="p-6 h-fit">
+                <Card className="p-6 h-fit shadow-elegant border-border/50">
                     <h3 className="font-bold text-foreground mb-4 border-b border-border pb-2 flex items-center gap-2">
                         <LucideUser size={18} className="text-primary" />
                         Custodio Actual
