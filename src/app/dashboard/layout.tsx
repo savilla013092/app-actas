@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
@@ -30,6 +30,13 @@ const navItems = [
         description: 'Resumen general'
     },
     { 
+        label: 'Préstamo Express',
+        href: '/express-loans',
+        icon: LucideBox,
+        roles: ['admin', 'logistica', 'custodio'],
+        description: 'Registro de entrega funcional'
+    },
+    {
         label: 'Activos', 
         href: '/activos', 
         icon: LucideBox, 
@@ -48,7 +55,7 @@ const navItems = [
         href: '/admin/usuarios', 
         icon: LucideUsers, 
         roles: ['admin'],
-        description: 'Gestión de usuarios'
+        description: 'GestiÃ³n de usuarios'
     },
 ];
 
@@ -56,8 +63,9 @@ const pageTitles: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/activos': 'Inventario de Activos',
     '/revision': 'Revisiones',
-    '/admin/usuarios': 'Gestión de Usuarios',
+    '/admin/usuarios': 'GestiÃ³n de Usuarios',
     '/admin/importar': 'Importar Datos',
+    '/express-loans': 'Préstamo Express',
 };
 
 export default function DashboardLayout({
@@ -133,7 +141,7 @@ export default function DashboardLayout({
                     {/* Navigation */}
                     <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
                         <p className="px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            Navegación
+                            NavegaciÃ³n
                         </p>
                         {filteredNavItems.map((item) => {
                             const isActive = isActiveRoute(item.href);
@@ -178,7 +186,7 @@ export default function DashboardLayout({
                             onClick={handleLogout}
                         >
                             <LucideLogOut size={18} />
-                            <span>Cerrar Sesión</span>
+                            <span>Cerrar SesiÃ³n</span>
                         </Button>
                     </div>
                 </aside>
