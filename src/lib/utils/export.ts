@@ -1,5 +1,6 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
+import { getAssetClassification } from '@/lib/utils/assetClassification';
 
 export interface ExportColumn {
     key: string;
@@ -42,13 +43,17 @@ export function exportToExcel<T extends Record<string, any>>(
 }
 
 export const activosExportColumns: ExportColumn[] = [
-    { key: 'codigo', header: 'Código' },
-    { key: 'descripcion', header: 'Descripción' },
-    { key: 'categoria', header: 'Categoría' },
+    { key: 'codigo', header: 'Codigo' },
+    { key: 'descripcion', header: 'Descripcion' },
+    {
+        key: 'categoria',
+        header: 'Categoria',
+        transform: (_value, row) => getAssetClassification(row.codigo, row.categoria).classificationName,
+    },
     { key: 'marca', header: 'Marca' },
     { key: 'modelo', header: 'Modelo' },
     { key: 'serial', header: 'Serial' },
-    { key: 'ubicacion', header: 'Ubicación' },
+    { key: 'ubicacion', header: 'Ubicacion' },
     { key: 'dependencia', header: 'Dependencia' },
     { key: 'custodioNombre', header: 'Custodio' },
     { key: 'estado', header: 'Estado', transform: (v) => v?.toUpperCase() || 'N/A' },
@@ -60,10 +65,10 @@ export const activosExportColumns: ExportColumn[] = [
 ];
 
 export const revisionesExportColumns: ExportColumn[] = [
-    { key: 'numeroActa', header: 'Número Acta', transform: (v) => v || 'Pendiente' },
-    { key: 'codigoActivo', header: 'Código Activo' },
-    { key: 'descripcionActivo', header: 'Descripción Activo' },
-    { key: 'ubicacionActivo', header: 'Ubicación' },
+    { key: 'numeroActa', header: 'Numero Acta', transform: (v) => v || 'Pendiente' },
+    { key: 'codigoActivo', header: 'Codigo Activo' },
+    { key: 'descripcionActivo', header: 'Descripcion Activo' },
+    { key: 'ubicacionActivo', header: 'Ubicacion' },
     { key: 'custodioNombre', header: 'Custodio' },
     { key: 'revisorNombre', header: 'Revisor' },
     { key: 'estadoActivo', header: 'Estado Activo', transform: (v) => v?.toUpperCase() || 'N/A' },
@@ -71,7 +76,7 @@ export const revisionesExportColumns: ExportColumn[] = [
     { key: 'observaciones', header: 'Observaciones' },
     { 
         key: 'fecha', 
-        header: 'Fecha Revisión',
+        header: 'Fecha Revision',
         transform: (v) => {
             if (!v) return 'N/A';
             if (typeof v === 'object' && 'seconds' in v) {

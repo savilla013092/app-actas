@@ -11,6 +11,7 @@ import { LucideArrowLeft, LucideHome } from 'lucide-react';
 import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
+import { getAssetClassification } from '@/lib/utils/assetClassification';
 
 export default function ImportarPage() {
     const router = useRouter();
@@ -21,17 +22,6 @@ export default function ImportarPage() {
 
     const addLog = (message: string) => {
         setLog(prev => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
-    };
-
-    const obtenerCategoria = (codigoClasificacion: number | string) => {
-        const categorias: { [key: string]: string } = {
-            '2420': 'Equipo de Cómputo',
-            '2430': 'Mobiliario',
-            '2440': 'Vehículos',
-            '2450': 'Maquinaria',
-        };
-        const codigo = String(codigoClasificacion).substring(0, 4);
-        return categorias[codigo] || 'Equipo de Cómputo';
     };
 
     const convertirFechaExcel = (fechaExcel: number | string | null): Date | null => {
@@ -61,7 +51,7 @@ export default function ImportarPage() {
                 actualizadoEn: serverTimestamp(),
                 creadoPor: 'importacion-inicial',
             }, { merge: true });
-            addLog(`✓ Usuario admin actualizado: ${user.email}`);
+            addLog(`Ã¢Å“â€œ Usuario admin actualizado: ${user.email}`);
         }
 
         // Usuario custodio por defecto
@@ -72,31 +62,31 @@ export default function ImportarPage() {
             nombre: 'Custodio General',
             cedula: '2222222222',
             cargo: 'Custodio de Activos',
-            dependencia: 'Dirección Administrativa',
+            dependencia: 'DirecciÃƒÂ³n Administrativa',
             rol: 'custodio',
             activo: true,
             creadoEn: serverTimestamp(),
             actualizadoEn: serverTimestamp(),
             creadoPor: 'importacion-inicial',
         }, { merge: true });
-        addLog('✓ Usuario custodio creado');
+        addLog('Ã¢Å“â€œ Usuario custodio creado');
 
-        // Usuario logística
+        // Usuario logÃƒÂ­stica
         const logisticaId = 'logistica-sistema';
         const logisticaRef = doc(db, 'usuarios', logisticaId);
         await setDoc(logisticaRef, {
             email: 'logistica@serviciudad.gov.co',
-            nombre: 'Profesional Logística',
+            nombre: 'Profesional LogÃƒÂ­stica',
             cedula: '1111111111',
-            cargo: 'Profesional Logística',
-            dependencia: 'Logística',
+            cargo: 'Profesional LogÃƒÂ­stica',
+            dependencia: 'LogÃƒÂ­stica',
             rol: 'logistica',
             activo: true,
             creadoEn: serverTimestamp(),
             actualizadoEn: serverTimestamp(),
             creadoPor: 'importacion-inicial',
         }, { merge: true });
-        addLog('✓ Usuario logística creado');
+        addLog('Ã¢Å“â€œ Usuario logÃƒÂ­stica creado');
 
         return custodioId;
     };
@@ -108,7 +98,7 @@ export default function ImportarPage() {
 
         try {
             addLog('='.repeat(50));
-            addLog('IMPORTACIÓN DE ACTIVOS - SERVICIUDAD ESP');
+            addLog('IMPORTACIÃƒâ€œN DE ACTIVOS - SERVICIUDAD ESP');
             addLog('='.repeat(50));
 
             // Crear usuarios primero
@@ -124,7 +114,7 @@ export default function ImportarPage() {
             const totalFilas = datos.length - 1;
             addLog(`Total de activos a importar: ${totalFilas}`);
 
-            // Índices de columnas
+            // ÃƒÂndices de columnas
             const COL = {
                 CODIGO: 0,
                 PLACA: 1,
@@ -158,10 +148,10 @@ export default function ImportarPage() {
 
                 const activo: Record<string, unknown> = {
                     codigo: `AF-${String(fila[COL.CODIGO])}`,
-                    descripcion: fila[COL.DESCRIPCION] || 'Sin descripción',
-                    categoria: obtenerCategoria(fila[COL.CLASIFICACION] as number),
-                    ubicacion: `Ubicación ${fila[COL.UBICACION] || 'Sin asignar'}`,
-                    dependencia: 'Dirección Administrativa',
+                    descripcion: fila[COL.DESCRIPCION] || 'Sin descripciÃƒÂ³n',
+                    categoria: getAssetClassification(String(fila[COL.CLASIFICACION] || fila[COL.CODIGO] || '')).classificationName,
+                    ubicacion: `UbicaciÃƒÂ³n ${fila[COL.UBICACION] || 'Sin asignar'}`,
+                    dependencia: 'DirecciÃƒÂ³n Administrativa',
                     custodioId: custodioId,
                     custodioNombre: 'Custodio General',
                     estado: estado,
@@ -185,7 +175,7 @@ export default function ImportarPage() {
                 batchCount++;
                 importados++;
 
-                // Commit batch si llega al límite
+                // Commit batch si llega al lÃƒÂ­mite
                 if (batchCount >= BATCH_SIZE) {
                     await batch.commit();
                     const porcentaje = Math.round((importados / totalFilas) * 100);
@@ -203,13 +193,13 @@ export default function ImportarPage() {
 
             setProgress(100);
             addLog('='.repeat(50));
-            addLog('IMPORTACIÓN COMPLETADA');
+            addLog('IMPORTACIÃƒâ€œN COMPLETADA');
             addLog('='.repeat(50));
-            addLog(`✓ Total de activos importados: ${importados}`);
+            addLog(`Ã¢Å“â€œ Total de activos importados: ${importados}`);
 
         } catch (error) {
             addLog(`ERROR: ${error instanceof Error ? error.message : 'Error desconocido'}`);
-            console.error('Error durante la importación:', error);
+            console.error('Error durante la importaciÃƒÂ³n:', error);
         } finally {
             setLoading(false);
         }
@@ -226,7 +216,7 @@ export default function ImportarPage() {
         return (
             <div className="flex justify-center items-center h-64">
                 <Card className="p-6">
-                    <p className="text-red-600">Debe iniciar sesión para acceder a esta página.</p>
+                    <p className="text-red-600">Debe iniciar sesiÃƒÂ³n para acceder a esta pÃƒÂ¡gina.</p>
                 </Card>
             </div>
         );
@@ -242,7 +232,7 @@ export default function ImportarPage() {
                     className="flex items-center gap-2"
                 >
                     <LucideArrowLeft size={16} />
-                    Atrás
+                    AtrÃƒÂ¡s
                 </Button>
                 <Link href="/dashboard">
                     <Button variant="outline" size="sm" className="flex items-center gap-2">
@@ -292,7 +282,7 @@ export default function ImportarPage() {
 
             {log.length > 0 && (
                 <Card className="p-6">
-                    <h3 className="font-semibold mb-4">Log de Importación</h3>
+                    <h3 className="font-semibold mb-4">Log de ImportaciÃƒÂ³n</h3>
                     <div className="bg-foreground text-emerald-300 p-4 rounded-lg font-mono text-sm max-h-96 overflow-y-auto">
                         {log.map((line, i) => (
                             <div key={i}>{line}</div>
