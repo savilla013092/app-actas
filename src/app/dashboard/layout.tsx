@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { AuthGuard } from '@/components/layout/AuthGuard';
 import { useAuth } from '@/hooks/useAuth';
@@ -33,7 +33,7 @@ const navItems = [
         label: 'Préstamo Express',
         href: '/express-loans',
         icon: LucideBox,
-        roles: ['admin', 'logistica', 'custodio'],
+        roles: ['admin', 'logistica'],
         description: 'Registro de entrega funcional'
     },
     {
@@ -55,7 +55,7 @@ const navItems = [
         href: '/admin/usuarios', 
         icon: LucideUsers, 
         roles: ['admin'],
-        description: 'GestiÃ³n de usuarios'
+        description: 'Gestión de usuarios'
     },
 ];
 
@@ -63,9 +63,10 @@ const pageTitles: Record<string, string> = {
     '/dashboard': 'Dashboard',
     '/activos': 'Inventario de Activos',
     '/revision': 'Revisiones',
-    '/admin/usuarios': 'GestiÃ³n de Usuarios',
+    '/admin/usuarios': 'Gestión de Usuarios',
     '/admin/importar': 'Importar Datos',
     '/express-loans': 'Préstamo Express',
+    '/express-loans/new': 'Nuevo Préstamo Express',
 };
 
 export default function DashboardLayout({
@@ -141,7 +142,7 @@ export default function DashboardLayout({
                     {/* Navigation */}
                     <nav className="flex-1 p-4 space-y-1.5 overflow-y-auto">
                         <p className="px-3 py-2 text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
-                            NavegaciÃ³n
+                            Navegación
                         </p>
                         {filteredNavItems.map((item) => {
                             const isActive = isActiveRoute(item.href);
@@ -186,7 +187,7 @@ export default function DashboardLayout({
                             onClick={handleLogout}
                         >
                             <LucideLogOut size={18} />
-                            <span>Cerrar SesiÃ³n</span>
+                            <span>Cerrar Sesión</span>
                         </Button>
                     </div>
                 </aside>

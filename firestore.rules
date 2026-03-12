@@ -1,21 +1,21 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-
-    // ══════════════════════════════════════════════════════════════
-    // REGLAS TEMPORALES PARA IMPORTACIÓN
-    // ══════════════════════════════════════════════════════════════
-
-    // IMPORTANTE: Estas reglas son temporales para permitir la importación
-    // Después de importar, restaurar firestore.rules.backup
-
     function estaAutenticado() {
       return request.auth != null;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // COLECCIÓN: USUARIOS - Permitir escritura para auto-registro
-    // ══════════════════════════════════════════════════════════════
+    function tienePerfil() {
+      return estaAutenticado() &&
+        exists(/databases/$(database)/documents/usuarios/$(request.auth.uid));
+    }
+
+    function esAdminOLogistica() {
+      return tienePerfil() && (
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin' ||
+        get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.rol == 'logistica'
+      );
+    }
 
     match /usuarios/{userId} {
       allow read: if estaAutenticado();
@@ -23,19 +23,11 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // COLECCIÓN: ACTIVOS - Permitir escritura para importación
-    // ══════════════════════════════════════════════════════════════
-
     match /activos/{activoId} {
       allow read: if estaAutenticado();
       allow create, update: if estaAutenticado();
       allow delete: if false;
     }
-
-    // ══════════════════════════════════════════════════════════════
-    // COLECCIÓN: REVISIONES
-    // ══════════════════════════════════════════════════════════════
 
     match /revisiones/{revisionId} {
       allow read: if estaAutenticado();
@@ -43,17 +35,15 @@ service cloud.firestore {
       allow delete: if false;
     }
 
-    // ══════════════════════════════════════════════════════════════
-    // COLECCIÓN: CONSECUTIVOS (solo Cloud Functions)
-    // ══════════════════════════════════════════════════════════════
+    match /express_loans/{loanId} {
+      allow read: if esAdminOLogistica();
+      allow create, update: if esAdminOLogistica();
+      allow delete: if false;
+    }
 
     match /consecutivos/{docId} {
       allow read, write: if false;
     }
-
-    // ══════════════════════════════════════════════════════════════
-    // COLECCIÓN: AUDITORÍA
-    // ══════════════════════════════════════════════════════════════
 
     match /auditoria/{logId} {
       allow read: if estaAutenticado();

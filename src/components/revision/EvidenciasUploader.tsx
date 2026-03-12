@@ -15,7 +15,7 @@ export function EvidenciasUploader({ evidencias, onChange, maxFiles }: Evidencia
         if (e.target.files) {
             const newFiles = Array.from(e.target.files);
             if (evidencias.length + newFiles.length > maxFiles) {
-                alert(`Máximo ${maxFiles} archivos permitidos`);
+                alert(`M\u00e1ximo ${maxFiles} archivos permitidos`);
                 return;
             }
             onChange([...evidencias, ...newFiles]);
@@ -38,7 +38,7 @@ export function EvidenciasUploader({ evidencias, onChange, maxFiles }: Evidencia
                             alt={`Evidencia ${index + 1}`}
                             className="w-full h-full object-cover"
                         />
-                        <button
+                        <button type="button"
                             onClick={() => removeFile(index)}
                             className="absolute top-2 right-2 p-1 bg-red-500 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity"
                         >
