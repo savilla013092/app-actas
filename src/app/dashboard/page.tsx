@@ -18,6 +18,7 @@ import { obtenerTodosLosActivos } from '@/services/activoService';
 import { Revision } from '@/types/revision';
 import { Activo } from '@/types/activo';
 import { RevisionesPorMesChart, ActivosPorEstadoChart, CategoriaChart, TendenciaChart } from '@/components/charts/StatsChart';
+import { getAssetClassification } from '@/lib/utils/assetClassification';
 import Link from 'next/link';
 import {
     LucideClipboardCheck,
@@ -120,7 +121,7 @@ export default function DashboardPage() {
 
         const categoriaCount: Record<string, number> = {};
         allActivos.forEach(activo => {
-            const cat = activo.categoria || 'Sin categoría';
+            const cat = getAssetClassification(activo.codigo, activo.categoria).classificationName;
             categoriaCount[cat] = (categoriaCount[cat] || 0) + 1;
         });
 
@@ -266,7 +267,7 @@ export default function DashboardPage() {
 
             {!isCustodio() && allActivos.length > 0 && (
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-                    <CategoriaChart data={chartData.activosPorCategoria} title="Activos por Categoría" />
+                    <CategoriaChart data={chartData.activosPorCategoria} title="Activos por Clasificacion" />
                     <RevisionesPorMesChart data={chartData.revisionesPorMes} />
                 </div>
             )}

@@ -20,6 +20,7 @@ import {
 import { useAuth } from "@/hooks/useAuth";
 import { Activo } from "@/types/activo";
 import { CreateExpressLoanDTO, ExpressLoanItemType } from "@/types/expressLoan";
+import { getAssetClassification } from "@/lib/utils/assetClassification";
 
 interface ExpressLoanFormValues {
   borrower_name: string;
@@ -35,7 +36,7 @@ const inputClass =
 const buildAssetSnapshot = (asset: Activo) => ({
   codigo: asset.codigo,
   descripcion: asset.descripcion,
-  categoria: asset.categoria,
+  categoria: getAssetClassification(asset.codigo, asset.categoria).classificationName,
   marca: asset.marca,
   modelo: asset.modelo,
   serial: asset.serial,
@@ -87,25 +88,18 @@ export default function NewExpressLoanPage() {
         }
         setActivos(items.filter((asset) => asset.estado === "activo"));
       } catch (error) {
-      console.error("Error creating loan:", error);
-
-      const message =
-        error instanceof Error && error.message === "ACTIVE_LOAN_EXISTS"
-          ? "El activo seleccionado ya tiene un prestamo express activo."
-          : error instanceof Error && error.message === "EVIDENCE_REQUIRED"
-          ? "El item comodin requiere al menos una foto como soporte."
-          : error instanceof Error && error.message.includes("permission-denied")
-          ? "No tiene permisos para registrar prestamos express."
-          : "Hubo un error al guardar el prestamo. Revise la conexion e intentelo nuevamente.";
-      setFormError(message);
-    } finally {
+        console.error("Error loading assets for express loan:", error);
+        if (active) {
+          setFormError("No fue posible cargar el inventario de activos disponibles.");
+        }
+      } finally {
         if (active) {
           setLoadingAssets(false);
         }
       }
     }
 
-    loadAssets();
+    void loadAssets();
 
     return () => {
       active = false;
@@ -358,7 +352,7 @@ export default function NewExpressLoanPage() {
                           <Badge variant="info">{selectedAsset.codigo}</Badge>
                         </div>
                         <p className="mt-1 text-sm text-slate-500">
-                          {selectedAsset.categoria} · {selectedAsset.ubicacion} · {selectedAsset.dependencia}
+                          {getAssetClassification(selectedAsset.codigo, selectedAsset.categoria).classificationName} - {selectedAsset.ubicacion} - {selectedAsset.dependencia}
                         </p>
                       </div>
                       <Badge variant="outline">Custodio: {selectedAsset.custodioNombre}</Badge>

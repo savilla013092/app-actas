@@ -14,6 +14,7 @@ import { Badge } from '@/components/ui/badge';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LucideBox, LucideHistory, LucideUser, LucideMapPin, LucideFileText, LucideClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
+import { getAssetClassification } from '@/lib/utils/assetClassification';
 
 export default function ActivoDetailPage() {
     const { id } = useParams();
@@ -78,6 +79,8 @@ export default function ActivoDetailPage() {
         return <div className="text-center py-12 text-red-500">Activo no encontrado.</div>;
     }
 
+    const assetClassification = getAssetClassification(activo.codigo, activo.categoria);
+
     const breadcrumbItems = [
         { label: 'Activos', href: '/activos', icon: <LucideBox size={14} /> },
         { label: activo.codigo },
@@ -111,7 +114,7 @@ export default function ActivoDetailPage() {
                         <div className="grid grid-cols-2 gap-y-6 gap-x-8">
                             <div>
                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Categoría</p>
-                                <p className="text-foreground font-medium">{activo.categoria}</p>
+                                <p className="text-foreground font-medium">{assetClassification.classificationName}</p>
                             </div>
                             <div>
                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Estado</p>

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
 import { z } from 'zod';
@@ -10,24 +10,24 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select } from '@/components/ui/select';
 import { Card } from '@/components/ui/card';
-import { Spinner } from '@/components/ui/spinner';
 import { useAuth } from '@/hooks/useAuth';
 import { crearActivo, actualizarActivo } from '@/services/activoService';
 import { obtenerTodosLosUsuarios } from '@/services/usuarioService';
 import { Activo, EstadoActivoFisico } from '@/types/activo';
 import { Usuario } from '@/types/usuario';
 import { LucideX } from 'lucide-react';
+import { getAssetClassification } from '@/lib/utils/assetClassification';
 
 const activoSchema = z.object({
-    codigo: z.string().min(1, 'El código es requerido'),
-    descripcion: z.string().min(5, 'La descripción debe tener al menos 5 caracteres'),
-    categoria: z.string().min(1, 'La categoría es requerida'),
+    codigo: z.string().min(1, 'El codigo es requerido'),
+    descripcion: z.string().min(5, 'La descripcion debe tener al menos 5 caracteres'),
+    categoria: z.string().min(1, 'La clasificacion es requerida'),
     marca: z.string().optional(),
     modelo: z.string().optional(),
     serial: z.string().optional(),
-    ubicacion: z.string().min(1, 'La ubicación es requerida'),
+    ubicacion: z.string().min(1, 'La ubicacion es requerida'),
     dependencia: z.string().min(1, 'La dependencia es requerida'),
-    custodioId: z.string().optional(), // Opcional si no hay usuarios
+    custodioId: z.string().optional(),
     estado: z.enum(['activo', 'baja', 'traslado', 'mantenimiento']),
     valorAdquisicion: z.string().optional(),
     fechaAdquisicion: z.string().optional(),
@@ -42,39 +42,34 @@ interface ActivoFormProps {
     onCancel: () => void;
 }
 
-const CATEGORIAS = [
-    'Mobiliario',
-    'Equipo de Cómputo',
-    'Equipo de Oficina',
-    'Vehículos',
-    'Maquinaria',
-    'Herramientas',
-    'Equipo de Comunicación',
-    'Otros',
-];
-
 const DEPENDENCIAS = [
     'Gerencia General',
-    'Dirección Administrativa',
-    'Dirección Técnica',
-    'Dirección Comercial',
+    'Direccion Administrativa',
+    'Direccion Tecnica',
+    'Direccion Comercial',
     'Recursos Humanos',
     'Contabilidad',
-    'Logística',
+    'Logistica',
     'Sistemas',
-    'Atención al Cliente',
+    'Atencion al Cliente',
     'Operaciones',
 ];
 
 const toDateInputValue = (value: unknown): string => {
     if (!value) return '';
+
     let date: Date | null = null;
     if (value instanceof Date) {
         date = value;
     } else if (typeof value === 'string' || typeof value === 'number') {
         const parsed = new Date(value);
         if (!Number.isNaN(parsed.getTime())) date = parsed;
-    } else if (typeof value === 'object' && value !== null && 'toDate' in value && typeof (value as { toDate?: unknown }).toDate === 'function') {
+    } else if (
+        typeof value === 'object' &&
+        value !== null &&
+        'toDate' in value &&
+        typeof (value as { toDate?: unknown }).toDate === 'function'
+    ) {
         const parsed = (value as { toDate: () => Date }).toDate();
         if (!Number.isNaN(parsed.getTime())) date = parsed;
     }
@@ -91,12 +86,12 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
     const [error, setError] = useState<string | null>(null);
     const isEditing = !!activo;
 
-    const { register, handleSubmit, setValue, formState: { errors } } = useForm<ActivoFormData>({
+    const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ActivoFormData>({
         resolver: zodResolver(activoSchema),
         defaultValues: activo ? {
             codigo: activo.codigo,
             descripcion: activo.descripcion,
-            categoria: activo.categoria,
+            categoria: getAssetClassification(activo.codigo, activo.categoria).classificationName,
             marca: activo.marca || '',
             modelo: activo.modelo || '',
             serial: activo.serial || '',
@@ -114,6 +109,16 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
         },
     });
 
+    const codigoValue = watch('codigo');
+    const derivedCategory = useMemo(
+        () => getAssetClassification(codigoValue, activo?.categoria).classificationName,
+        [codigoValue, activo?.categoria]
+    );
+
+    useEffect(() => {
+        setValue('categoria', derivedCategory, { shouldValidate: true });
+    }, [derivedCategory, setValue]);
+
     useEffect(() => {
         let cancelled = false;
         const timeoutId = setTimeout(() => {
@@ -127,19 +132,19 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             try {
                 const usuarios = await obtenerTodosLosUsuarios();
                 if (cancelled) return;
-                // Mostrar todos los usuarios activos (cualquiera puede ser custodio de un activo)
-                const usuariosActivos = usuarios.filter(u => u.activo);
-                setCustodios(usuariosActivos);
-            } catch (error) {
+                setCustodios(usuarios.filter(u => u.activo));
+            } catch (loadError) {
                 if (cancelled) return;
-                console.error('Error loading custodios:', error);
+                console.error('Error loading custodios:', loadError);
                 setCustodios([]);
             } finally {
                 if (!cancelled) setLoadingCustodios(false);
                 clearTimeout(timeoutId);
             }
         }
-        loadCustodios();
+
+        void loadCustodios();
+
         return () => {
             cancelled = true;
             clearTimeout(timeoutId);
@@ -150,18 +155,17 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
         setError(null);
 
         if (!user) {
-            setError('Debe iniciar sesión para crear un activo');
+            setError('Debe iniciar sesion para crear un activo');
             return;
         }
 
-        // Verificar que el usuario tenga el rol adecuado
         if (!user.usuario) {
-            setError('Su perfil de usuario no está configurado correctamente. Por favor, cierre sesión e inicie de nuevo.');
+            setError('Su perfil de usuario no esta configurado correctamente. Cierre sesion e inicie de nuevo.');
             return;
         }
 
         if (!isAdmin() && !isLogistica()) {
-            setError('No tiene permisos para crear o editar activos. Se requiere rol de Administrador o Logística.');
+            setError('No tiene permisos para crear o editar activos.');
             return;
         }
 
@@ -173,7 +177,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             const activoData = {
                 codigo: data.codigo,
                 descripcion: data.descripcion,
-                categoria: data.categoria,
+                categoria: getAssetClassification(data.codigo, data.categoria).classificationName,
                 marca: data.marca || undefined,
                 modelo: data.modelo || undefined,
                 serial: data.serial || undefined,
@@ -200,9 +204,8 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             let errorMessage = 'Error desconocido';
 
             if (err instanceof Error) {
-                // Detectar errores de permisos de Firestore
                 if (err.message.includes('permission-denied') || err.message.includes('PERMISSION_DENIED')) {
-                    errorMessage = 'No tiene permisos para realizar esta acción. Verifique que su usuario tenga rol de Administrador o Logística en Firestore.';
+                    errorMessage = 'No tiene permisos para realizar esta accion. Verifique su rol.';
                 } else {
                     errorMessage = err.message;
                 }
@@ -220,7 +223,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                 <h2 className="text-xl font-bold text-foreground">
                     {isEditing ? 'Editar Activo' : 'Nuevo Activo'}
                 </h2>
-                <button onClick={onCancel} className="text-muted-foreground hover:text-foreground">
+                <button type="button" onClick={onCancel} className="text-muted-foreground hover:text-foreground">
                     <LucideX size={24} />
                 </button>
             </div>
@@ -234,34 +237,36 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             <form onSubmit={handleSubmit(onSubmit)} className="space-y-4">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <Label htmlFor="codigo">Código del Activo *</Label>
+                        <Label htmlFor="codigo">Codigo del Activo *</Label>
                         <Input
                             id="codigo"
                             {...register('codigo')}
-                            placeholder="Ej: AF-MOB-2024-0001"
+                            placeholder="Ej: AF-2420-0001"
                         />
                         {errors.codigo && <p className="text-red-500 text-sm mt-1">{errors.codigo.message}</p>}
                     </div>
 
                     <div>
-                        <Label htmlFor="categoria">Categoría *</Label>
-                        <Select id="categoria" {...register('categoria')}>
-                            <option value="">Seleccione una categoría</option>
-                            {CATEGORIAS.map(cat => (
-                                <option key={cat} value={cat}>{cat}</option>
-                            ))}
-                        </Select>
+                        <Label htmlFor="categoria">Clasificacion *</Label>
+                        <Input
+                            id="categoria"
+                            {...register('categoria')}
+                            readOnly
+                        />
+                        <p className="mt-1 text-xs text-muted-foreground">
+                            Se calcula automaticamente con los primeros 4 digitos del codigo del activo.
+                        </p>
                         {errors.categoria && <p className="text-red-500 text-sm mt-1">{errors.categoria.message}</p>}
                     </div>
                 </div>
 
                 <div>
-                    <Label htmlFor="descripcion">Descripción *</Label>
+                    <Label htmlFor="descripcion">Descripcion *</Label>
                     <Textarea
                         id="descripcion"
                         {...register('descripcion')}
                         rows={2}
-                        placeholder="Descripción detallada del activo"
+                        placeholder="Descripcion detallada del activo"
                     />
                     {errors.descripcion && <p className="text-red-500 text-sm mt-1">{errors.descripcion.message}</p>}
                 </div>
@@ -277,13 +282,13 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                     </div>
                     <div>
                         <Label htmlFor="serial">Serial</Label>
-                        <Input id="serial" {...register('serial')} placeholder="Número de serie" />
+                        <Input id="serial" {...register('serial')} placeholder="Numero de serie" />
                     </div>
                 </div>
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <Label htmlFor="ubicacion">Ubicación *</Label>
+                        <Label htmlFor="ubicacion">Ubicacion *</Label>
                         <Input id="ubicacion" {...register('ubicacion')} placeholder="Ej: Oficina 201, Piso 2" />
                         {errors.ubicacion && <p className="text-red-500 text-sm mt-1">{errors.ubicacion.message}</p>}
                     </div>
@@ -334,7 +339,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <Label htmlFor="valorAdquisicion">Valor de Adquisición</Label>
+                        <Label htmlFor="valorAdquisicion">Valor de Adquisicion</Label>
                         <Input
                             id="valorAdquisicion"
                             type="number"
@@ -344,7 +349,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                         />
                     </div>
                     <div>
-                        <Label htmlFor="fechaAdquisicion">Fecha de Adquisición</Label>
+                        <Label htmlFor="fechaAdquisicion">Fecha de Adquisicion</Label>
                         <Input id="fechaAdquisicion" type="date" {...register('fechaAdquisicion')} />
                     </div>
                 </div>

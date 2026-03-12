@@ -1,17 +1,20 @@
-const ASSET_CLASSIFICATION_MAP: Record<string, string> = {
-  "2420": "Equipo de Computo",
-  "2430": "Mobiliario",
-  "2440": "Vehiculos",
-  "2450": "Maquinaria",
-};
+import assetClassificationMap from "@/lib/constants/assetClassificationMap.json";
 
-const extractClassificationCode = (value?: string | null): string | undefined => {
-  if (!value) {
+const ASSET_CLASSIFICATION_MAP = assetClassificationMap as Record<string, string>;
+
+export const normalizeClassificationCode = (
+  value?: string | number | null
+): string | undefined => {
+  if (value === undefined || value === null) {
     return undefined;
   }
 
-  const numericPrefix = value.replace(/\D/g, "").slice(0, 4);
-  return numericPrefix.length === 4 ? numericPrefix : undefined;
+  const digits = String(value).replace(/\D/g, "");
+  if (!digits) {
+    return undefined;
+  }
+
+  return digits.length >= 4 ? digits.slice(0, 4) : digits.padStart(4, "0");
 };
 
 export interface AssetClassification {
@@ -20,10 +23,10 @@ export interface AssetClassification {
 }
 
 export function getAssetClassification(
-  sourceCode?: string | null,
+  sourceCode?: string | number | null,
   fallbackCategory?: string | null
 ): AssetClassification {
-  const classificationCode = extractClassificationCode(sourceCode);
+  const classificationCode = normalizeClassificationCode(sourceCode);
   const mappedCategory = classificationCode
     ? ASSET_CLASSIFICATION_MAP[classificationCode]
     : undefined;

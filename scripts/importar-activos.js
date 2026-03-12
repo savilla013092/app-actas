@@ -1,49 +1,75 @@
 /**
- * Script para importar activos desde el archivo Excel a Firestore
+ * Script para importar activos desde el archivo Excel a Firestore.
  * Ejecutar con: node scripts/importar-activos.js
  */
 
 const admin = require('firebase-admin');
 const XLSX = require('xlsx');
 const path = require('path');
+const fs = require('fs');
+const os = require('os');
+const assetClassificationMap = require('../src/lib/constants/assetClassificationMap.json');
 
-// Inicializar Firebase Admin con Service Account Key
-// La ubicación del archivo debe ser: C:\Users\<usuario>\firebase-credentials\service-account.json
-const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT ||
-    path.join(require('os').homedir(), 'firebase-credentials', 'service-account.json');
-const serviceAccount = require(serviceAccountPath);
-admin.initializeApp({
-    credential: admin.credential.cert(serviceAccount),
-    projectId: 'serviciudad-actas',
-});
+function initializeFirebaseAdmin() {
+    if (admin.apps.length > 0) {
+        return admin.app();
+    }
 
-const db = admin.firestore();
+    const serviceAccountPath = process.env.FIREBASE_SERVICE_ACCOUNT ||
+        path.join(os.homedir(), 'firebase-credentials', 'service-account.json');
 
-// Mapeo de categorías basado en el código de clasificación
-function obtenerCategoria(codigoClasificacion) {
-    const categorias = {
-        '2420': 'Equipo de Cómputo',
-        '2430': 'Mobiliario',
-        '2440': 'Vehículos',
-        '2450': 'Maquinaria',
-    };
-    const codigo = String(codigoClasificacion).substring(0, 4);
-    return categorias[codigo] || 'Equipo de Cómputo';
+    if (fs.existsSync(serviceAccountPath)) {
+        const serviceAccount = require(serviceAccountPath);
+        return admin.initializeApp({
+            credential: admin.credential.cert(serviceAccount),
+            projectId: 'serviciudad-actas',
+        });
+    }
+
+    return admin.initializeApp({
+        credential: admin.credential.applicationDefault(),
+        projectId: 'serviciudad-actas',
+    });
 }
 
-// Convertir fecha de Excel a Date
+initializeFirebaseAdmin();
+const db = admin.firestore();
+
+function normalizarCodigoClasificacion(value) {
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+
+    const digits = String(value).replace(/\D/g, '');
+    if (!digits) {
+        return undefined;
+    }
+
+    return digits.length >= 4 ? digits.slice(0, 4) : digits.padStart(4, '0');
+}
+
+function obtenerCategoria(codigoActivo, categoriaFallback) {
+    const codigoClasificacion = normalizarCodigoClasificacion(codigoActivo);
+    if (codigoClasificacion && assetClassificationMap[codigoClasificacion]) {
+        return assetClassificationMap[codigoClasificacion];
+    }
+
+    if (categoriaFallback && String(categoriaFallback).trim()) {
+        return String(categoriaFallback).trim();
+    }
+
+    return 'Sin clasificacion';
+}
+
 function convertirFechaExcel(fechaExcel) {
     if (!fechaExcel || fechaExcel === '30/12/1899') return null;
     if (typeof fechaExcel === 'number') {
-        // Fecha en formato numérico de Excel
-        const fecha = new Date((fechaExcel - 25569) * 86400 * 1000);
-        return fecha;
+        return new Date((fechaExcel - 25569) * 86400 * 1000);
     }
     return null;
 }
 
-async function crearUsuarioAdmin() {
-    // Crear usuario admin por defecto si no existe
+async function crearUsuariosBase() {
     const adminId = 'admin-sistema';
     const adminRef = db.collection('usuarios').doc(adminId);
     const adminDoc = await adminRef.get();
@@ -61,10 +87,9 @@ async function crearUsuarioAdmin() {
             actualizadoEn: admin.firestore.FieldValue.serverTimestamp(),
             creadoPor: 'importacion-inicial',
         });
-        console.log('✓ Usuario admin creado');
+        console.log('Usuario admin creado');
     }
 
-    // Crear usuario logística por defecto
     const logisticaId = 'logistica-sistema';
     const logisticaRef = db.collection('usuarios').doc(logisticaId);
     const logisticaDoc = await logisticaRef.get();
@@ -72,20 +97,19 @@ async function crearUsuarioAdmin() {
     if (!logisticaDoc.exists) {
         await logisticaRef.set({
             email: 'logistica@serviciudad.gov.co',
-            nombre: 'Profesional Logística',
+            nombre: 'Profesional Logistica',
             cedula: '1111111111',
-            cargo: 'Profesional Logística',
-            dependencia: 'Logística',
+            cargo: 'Profesional Logistica',
+            dependencia: 'Logistica',
             rol: 'logistica',
             activo: true,
             creadoEn: admin.firestore.FieldValue.serverTimestamp(),
             actualizadoEn: admin.firestore.FieldValue.serverTimestamp(),
             creadoPor: 'importacion-inicial',
         });
-        console.log('✓ Usuario logística creado');
+        console.log('Usuario logistica creado');
     }
 
-    // Crear usuario custodio de ejemplo
     const custodioId = 'custodio-sistema';
     const custodioRef = db.collection('usuarios').doc(custodioId);
     const custodioDoc = await custodioRef.get();
@@ -96,29 +120,27 @@ async function crearUsuarioAdmin() {
             nombre: 'Custodio General',
             cedula: '2222222222',
             cargo: 'Custodio de Activos',
-            dependencia: 'Dirección Administrativa',
+            dependencia: 'Direccion Administrativa',
             rol: 'custodio',
             activo: true,
             creadoEn: admin.firestore.FieldValue.serverTimestamp(),
             actualizadoEn: admin.firestore.FieldValue.serverTimestamp(),
             creadoPor: 'importacion-inicial',
         });
-        console.log('✓ Usuario custodio creado');
+        console.log('Usuario custodio creado');
     }
 
-    return { adminId, logisticaId, custodioId };
+    return { custodioId };
 }
 
 async function importarActivos() {
     console.log('='.repeat(60));
-    console.log('IMPORTACIÓN DE ACTIVOS - SERVICIUDAD ESP');
+    console.log('IMPORTACION DE ACTIVOS - SERVICIUDAD ESP');
     console.log('='.repeat(60));
 
     try {
-        // Crear usuarios por defecto
-        const { custodioId } = await crearUsuarioAdmin();
+        const { custodioId } = await crearUsuariosBase();
 
-        // Leer archivo Excel desde carpeta data/
         const archivoExcel = path.join(__dirname, '..', 'data', 'Listado_activos.xlsx');
         console.log(`\nLeyendo archivo: ${archivoExcel}`);
 
@@ -126,29 +148,21 @@ async function importarActivos() {
         const worksheet = workbook.Sheets[workbook.SheetNames[0]];
         const datos = XLSX.utils.sheet_to_json(worksheet, { header: 1 });
 
-        // Obtener encabezados
-        const encabezados = datos[0];
         console.log(`Total de filas: ${datos.length - 1}`);
 
-        // Índices de columnas importantes
         const COL = {
-            CODIGO: 0,           // Codigo Activo
-            PLACA: 1,            // Placa Inventario Activo
-            DESCRIPCION: 2,      // Descripción Activo
-            CLASIFICACION: 3,    // Codigo Clasificación
-            UBICACION: 7,        // Codigo Ubicación
-            REFERENCIA: 8,       // Referencia
-            SERIAL: 9,           // Serial
-            DESC_TECNICA: 10,    // Descripcion Tecnica
-            MARCA: 48,           // Marca
-            MODELO: 50,          // Modelo
-            FECHA_ADQ: 63,       // Fecha Adquisición
-            VALOR: 64,           // Valor Costo Adquisición
-            RETIRADO: 76,        // Retirado
-            DEPRECIADO: 77,      // Depreciado
+            CODIGO: 0,
+            DESCRIPCION: 2,
+            UBICACION: 7,
+            SERIAL: 9,
+            DESC_TECNICA: 10,
+            MARCA: 48,
+            MODELO: 50,
+            FECHA_ADQ: 63,
+            VALOR: 64,
+            RETIRADO: 76,
         };
 
-        // Importar activos en lotes
         const BATCH_SIZE = 500;
         let importados = 0;
         let omitidos = 0;
@@ -158,30 +172,25 @@ async function importarActivos() {
         for (let i = 1; i < datos.length; i++) {
             const fila = datos[i];
 
-            // Omitir activos sin código
             if (!fila[COL.CODIGO]) {
                 omitidos++;
                 continue;
             }
 
-            // Determinar estado del activo
-            let estado = 'activo';
-            if (fila[COL.RETIRADO] === true) {
-                estado = 'baja';
-            }
+            const estado = fila[COL.RETIRADO] === true ? 'baja' : 'activo';
 
             const activo = {
                 codigo: `AF-${String(fila[COL.CODIGO])}`,
-                descripcion: fila[COL.DESCRIPCION] || 'Sin descripción',
-                categoria: obtenerCategoria(fila[COL.CLASIFICACION]),
+                descripcion: fila[COL.DESCRIPCION] || 'Sin descripcion',
+                categoria: obtenerCategoria(fila[COL.CODIGO]),
                 marca: fila[COL.MARCA] || undefined,
                 modelo: fila[COL.MODELO] || undefined,
                 serial: fila[COL.SERIAL] || undefined,
-                ubicacion: `Ubicación ${fila[COL.UBICACION] || 'Sin asignar'}`,
-                dependencia: 'Dirección Administrativa',
-                custodioId: custodioId,
+                ubicacion: `Ubicacion ${fila[COL.UBICACION] || 'Sin asignar'}`,
+                dependencia: 'Direccion Administrativa',
+                custodioId,
                 custodioNombre: 'Custodio General',
-                estado: estado,
+                estado,
                 valorAdquisicion: fila[COL.VALOR] || 0,
                 fechaAdquisicion: convertirFechaExcel(fila[COL.FECHA_ADQ]),
                 observaciones: fila[COL.DESC_TECNICA] || undefined,
@@ -190,8 +199,7 @@ async function importarActivos() {
                 creadoPor: 'importacion-excel',
             };
 
-            // Limpiar valores undefined
-            Object.keys(activo).forEach(key => {
+            Object.keys(activo).forEach((key) => {
                 if (activo[key] === undefined) {
                     delete activo[key];
                 }
@@ -202,34 +210,30 @@ async function importarActivos() {
             batchCount++;
             importados++;
 
-            // Commit batch si llega al límite
             if (batchCount >= BATCH_SIZE) {
                 await batch.commit();
-                console.log(`  Importados ${importados} activos...`);
+                console.log(`Importados ${importados} activos...`);
                 batch = db.batch();
                 batchCount = 0;
             }
         }
 
-        // Commit batch final
         if (batchCount > 0) {
             await batch.commit();
         }
 
         console.log('\n' + '='.repeat(60));
-        console.log('RESUMEN DE IMPORTACIÓN');
+        console.log('RESUMEN DE IMPORTACION');
         console.log('='.repeat(60));
-        console.log(`✓ Activos importados: ${importados}`);
-        console.log(`- Activos omitidos: ${omitidos}`);
-        console.log('\n¡Importación completada exitosamente!');
-
+        console.log(`Activos importados: ${importados}`);
+        console.log(`Activos omitidos: ${omitidos}`);
+        console.log('\nImportacion completada exitosamente.');
     } catch (error) {
-        console.error('Error durante la importación:', error);
+        console.error('Error durante la importacion:', error);
         process.exit(1);
     }
 }
 
-// Ejecutar importación
 importarActivos()
     .then(() => process.exit(0))
     .catch((error) => {

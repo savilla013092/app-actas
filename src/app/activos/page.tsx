@@ -256,7 +256,7 @@ export default function ActivosPage() {
     const filterConfig: FilterConfig[] = [
         {
             key: 'categoria',
-            label: 'Categoria',
+            label: 'Clasificacion',
             type: 'select',
             options: uniqueCategorias,
         },
