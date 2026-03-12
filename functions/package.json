@@ -1,4 +1,4 @@
-﻿{
+{
     "name":  "functions",
     "scripts":  {
                     "build":  "tsc \u0026\u0026 npm run copy-assets",
