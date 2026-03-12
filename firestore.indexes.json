@@ -1,89 +1,78 @@
-{
-    "indexes": [
-        {
-            "collectionGroup": "revisiones",
-            "queryScope": "COLLECTION",
-            "fields": [
-                {
-                    "fieldPath": "custodioId",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "fecha",
-                    "order": "DESCENDING"
-                }
-            ]
-        },
-        {
-            "collectionGroup": "revisiones",
-            "queryScope": "COLLECTION",
-            "fields": [
-                {
-                    "fieldPath": "revisorId",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "fecha",
-                    "order": "DESCENDING"
-                }
-            ]
-        },
-        {
-            "collectionGroup": "revisiones",
-            "queryScope": "COLLECTION",
-            "fields": [
-                {
-                    "fieldPath": "activoId",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "fecha",
-                    "order": "DESCENDING"
-                }
-            ]
-        },
-        {
-            "collectionGroup": "revisiones",
-            "queryScope": "COLLECTION",
-            "fields": [
-                {
-                    "fieldPath": "estado",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "creadoEn",
-                    "order": "DESCENDING"
-                }
-            ]
-        },
-        {
-            "collectionGroup": "activos",
-            "queryScope": "COLLECTION",
-            "fields": [
-                {
-                    "fieldPath": "custodioId",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "codigo",
-                    "order": "ASCENDING"
-                }
-            ]
-        },
-        {
-            "collectionGroup": "auditoria",
-            "queryScope": "COLLECTION",
-            "fields": [
-                {
-                    "fieldPath": "modulo",
-                    "order": "ASCENDING"
-                },
-                {
-                    "fieldPath": "timestamp",
-                    "order": "DESCENDING"
-                }
-            ]
-        }
-    ],
-    "fieldOverrides": []
+﻿{
+  "indexes": [
+    {
+      "collectionGroup": "revisiones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "custodioId", "order": "ASCENDING" },
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "revisiones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "revisorId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "revisiones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "activoId", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "revisiones",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "fecha", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "custodioId", "order": "ASCENDING" },
+        { "fieldPath": "codigo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "search.codigo", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "search.serial", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "express_loans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "loan_date", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "express_loans",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "asset_id", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": []
 }

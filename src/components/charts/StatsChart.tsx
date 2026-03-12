@@ -1,4 +1,4 @@
-'use client';
+﻿'use client';
 
 import {
     BarChart,
@@ -48,7 +48,6 @@ interface ChartData {
 interface BarChartData {
     name: string;
     value: number;
-    [key: string]: string | number;
 }
 
 interface RevisionesPorMesChartProps {
@@ -223,7 +222,7 @@ interface CategoriaChartProps {
 
 export function CategoriaChart({ 
     data, 
-    title = 'Por Categoría' 
+    title = 'Por Categoria' 
 }: CategoriaChartProps) {
     return (
         <Card className="h-full">
@@ -277,3 +276,5 @@ export function CategoriaChart({
 }
 
 export { CHART_COLORS, COLORS };
+
+

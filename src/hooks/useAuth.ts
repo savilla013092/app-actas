@@ -1,83 +1,97 @@
-import { useEffect } from 'react';
-import { onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc, serverTimestamp } from 'firebase/firestore';
+﻿import { useEffect } from 'react';
+import { getIdTokenResult, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+
 import { auth, db } from '@/lib/firebase/config';
+import { refreshSessionClaims } from '@/services/sessionService';
 import { useAuthStore } from '@/stores/authStore';
-import { Usuario, RolUsuario } from '@/types/usuario';
+import { Usuario, UsuarioAuth, UsuarioClaims } from '@/types/usuario';
 
-// Asignar rol basado en email (para desarrollo)
-function asignarRolPorEmail(email: string): RolUsuario {
-    // Emails con acceso admin
-    const admins = ['santy0130@gmail.com'];
-    if (admins.includes(email.toLowerCase())) return 'admin';
-
-    if (email.includes('admin')) return 'admin';
-    if (email.includes('logistica')) return 'logistica';
-    return 'custodio';
-}
+const normalizeClaims = (claims: Record<string, unknown>): UsuarioClaims => ({
+  role:
+    claims.role === 'admin' || claims.role === 'logistica' || claims.role === 'custodio'
+      ? claims.role
+      : undefined,
+  active: claims.active === true,
+});
 
 export function useAuth() {
-    const { user, loading, setUser, setLoading, isAdmin, isLogistica, isCustodio } = useAuthStore();
+  const {
+    user,
+    loading,
+    setUser,
+    setLoading,
+    getRole,
+    hasReadyAccess,
+    isAdmin,
+    isLogistica,
+    isCustodio,
+  } = useAuthStore();
 
-    useEffect(() => {
-        let unsubscribe: () => void;
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!firebaseUser) {
+        setUser(null);
+        setLoading(false);
+        return;
+      }
 
-        try {
-            unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
-                try {
-                    if (firebaseUser) {
-                        // Obtener datos del usuario de Firestore
-                        const userDocRef = doc(db, 'usuarios', firebaseUser.uid);
-                        let userDoc = await getDoc(userDocRef);
+      try {
+        const userDocRef = doc(db, 'usuarios', firebaseUser.uid);
+        const [userDoc] = await Promise.all([
+          getDoc(userDocRef),
+          refreshSessionClaims().catch((error) => {
+            console.warn('No fue posible refrescar los claims de sesion.', error);
+            return null;
+          }),
+        ]);
 
-                        // Si el usuario no existe en Firestore, crearlo automáticamente
-                        if (!userDoc.exists() && firebaseUser.email) {
-                            try {
-                                const nuevoUsuario = {
-                                    email: firebaseUser.email,
-                                    nombre: firebaseUser.displayName || firebaseUser.email.split('@')[0],
-                                    cedula: '',
-                                    cargo: 'Sin asignar',
-                                    dependencia: 'Sin asignar',
-                                    rol: asignarRolPorEmail(firebaseUser.email),
-                                    activo: true,
-                                    creadoEn: serverTimestamp(),
-                                    actualizadoEn: serverTimestamp(),
-                                    creadoPor: 'auto-registro',
-                                };
-                                await setDoc(userDocRef, nuevoUsuario);
-                                userDoc = await getDoc(userDocRef);
-                            } catch (error) {
-                                console.error('Error al crear documento de usuario:', error);
-                            }
-                        }
+        const usuario = userDoc.exists()
+          ? ({ id: userDoc.id, ...userDoc.data() } as Usuario)
+          : null;
 
-                        const usuario = userDoc.exists() ? { id: userDoc.id, ...userDoc.data() } as Usuario : null;
+        const tokenResult = await getIdTokenResult(firebaseUser, true);
+        const claims = normalizeClaims(tokenResult.claims);
 
-                        setUser({
-                            uid: firebaseUser.uid,
-                            email: firebaseUser.email,
-                            usuario,
-                        });
-                    } else {
-                        setUser(null);
-                    }
-                } catch (error) {
-                    console.error('Error en onAuthStateChanged:', error);
-                    setUser(null);
-                } finally {
-                    setLoading(false);
-                }
-            });
-        } catch (error) {
-            console.error('Error al suscribirse a auth:', error);
-            setLoading(false);
-        }
+        const accessStatus: UsuarioAuth['accessStatus'] = !usuario
+          ? 'no_profile'
+          : usuario.activo === false || claims.active === false
+          ? 'inactive'
+          : claims.role
+          ? 'ready'
+          : 'inactive';
 
-        return () => {
-            if (unsubscribe) unsubscribe();
-        };
-    }, [setUser, setLoading]);
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          usuario,
+          claims,
+          accessStatus,
+        });
+      } catch (error) {
+        console.error('Error loading authenticated session:', error);
+        setUser({
+          uid: firebaseUser.uid,
+          email: firebaseUser.email,
+          usuario: null,
+          claims: {},
+          accessStatus: 'inactive',
+        });
+      } finally {
+        setLoading(false);
+      }
+    });
 
-    return { user, loading, isAdmin, isLogistica, isCustodio };
+    return () => unsubscribe();
+  }, [setLoading, setUser]);
+
+  return {
+    user,
+    loading,
+    role: getRole(),
+    hasReadyAccess: hasReadyAccess(),
+    isAdmin,
+    isLogistica,
+    isCustodio,
+  };
 }

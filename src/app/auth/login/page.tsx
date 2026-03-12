@@ -1,112 +1,79 @@
-'use client';
+﻿'use client';
 
-import { LoginForm } from '@/components/forms/LoginForm';
 import Image from 'next/image';
 
+import { LoginForm } from '@/components/forms/LoginForm';
+
 export default function LoginPage() {
-    return (
-        <div className="min-h-screen flex">
-            {/* Left Panel - Branding */}
-            <div className="hidden lg:flex lg:w-1/2 xl:w-3/5 bg-gradient-to-br from-primary via-primary to-blue-800 relative overflow-hidden">
-                {/* Background Pattern */}
-                <div className="absolute inset-0 opacity-10">
-                    <div className="absolute top-0 left-0 w-96 h-96 bg-white rounded-full -translate-x-1/2 -translate-y-1/2" />
-                    <div className="absolute bottom-0 right-0 w-[600px] h-[600px] bg-white rounded-full translate-x-1/3 translate-y-1/3" />
-                    <div className="absolute top-1/2 left-1/3 w-64 h-64 bg-white rounded-full" />
-                </div>
-
-                {/* Content */}
-                <div className="relative z-10 flex flex-col justify-center items-center w-full p-12 text-white">
-                    <div className="w-32 h-32 bg-white/20 backdrop-blur-sm rounded-2xl p-4 mb-8 shadow-2xl ring-1 ring-white/30">
-                        <Image
-                            src="/logo-serviciudad.png"
-                            alt="SERVICIUDAD ESP"
-                            width={128}
-                            height={128}
-                            className="w-full h-full object-contain"
-                        />
-                    </div>
-                    
-                    <h1 className="text-4xl xl:text-5xl font-bold text-center mb-4">
-                        SERVICIUDAD
-                    </h1>
-                    <p className="text-xl text-white/80 text-center mb-2">
-                        Empresa de Servicios Públicos
-                    </p>
-                    <div className="w-24 h-1 bg-white/30 rounded-full my-6" />
-                    <p className="text-lg text-white/70 text-center max-w-md">
-                        Sistema de Actas de Revisión de Activos Fijos
-                    </p>
-                    
-                    {/* Features */}
-                    <div className="mt-12 space-y-4 max-w-md">
-                        {[
-                            'Registro fotográfico de evidencias',
-                            'Firma digital dual',
-                            'Generación automática de actas PDF',
-                        ].map((feature, idx) => (
-                            <div key={idx} className="flex items-center gap-3 text-white/80">
-                                <div className="w-2 h-2 rounded-full bg-white/60" />
-                                <span>{feature}</span>
-                            </div>
-                        ))}
-                    </div>
-                </div>
-            </div>
-
-            {/* Right Panel - Login Form */}
-            <div className="w-full lg:w-1/2 xl:w-2/5 flex items-center justify-center p-6 lg:p-12 bg-background relative">
-                {/* Mobile Logo */}
-                <div className="lg:hidden absolute top-8 left-1/2 -translate-x-1/2">
-                    <div className="w-16 h-16 bg-primary/15 rounded-xl p-2 ring-1 ring-primary/20">
-                        <Image
-                            src="/logo-serviciudad.png"
-                            alt="SERVICIUDAD ESP"
-                            width={64}
-                            height={64}
-                            className="w-full h-full object-contain"
-                        />
-                    </div>
-                </div>
-
-                <div className="w-full max-w-md">
-                    {/* Mobile Title */}
-                    <div className="lg:hidden text-center mb-8 mt-16">
-                        <h1 className="text-2xl font-bold text-foreground">SERVICIUDAD ESP</h1>
-                        <p className="text-muted-foreground mt-1">Sistema de Actas</p>
-                    </div>
-
-                    {/* Login Card */}
-                    <div className="glass-strong rounded-2xl shadow-elegant-xl border border-border/50 overflow-hidden">
-                        <div className="p-8">
-                            {/* Desktop Header */}
-                            <div className="hidden lg:block mb-8">
-                                <h2 className="text-2xl font-bold text-foreground">Bienvenido</h2>
-                                <p className="text-muted-foreground mt-1">
-                                    Ingrese sus credenciales para continuar
-                                </p>
-                            </div>
-
-                            <LoginForm />
-                        </div>
-
-                        {/* Footer */}
-                        <div className="px-8 py-5 bg-muted/30 border-t border-border/50">
-                            <p className="text-xs text-muted-foreground text-center">
-                                ¿No tiene acceso?{' '}
-                                <span className="text-primary font-medium">
-                                    Contacte al administrador de TI
-                                </span>
-                            </p>
-                        </div>
-                    </div>
-
-                    {/* Copyright */}
-                    <p className="text-xs text-muted-foreground text-center mt-6">
-                        © {new Date().getFullYear()} SERVICIUDAD ESP. Todos los derechos reservados.
-                    </p>
-                </div>
-            </div>
+  return (
+    <div className='flex min-h-screen'>
+      <div className='relative hidden overflow-hidden bg-gradient-to-br from-primary via-primary to-blue-800 lg:flex lg:w-1/2 xl:w-3/5'>
+        <div className='absolute inset-0 opacity-10'>
+          <div className='absolute left-0 top-0 h-96 w-96 -translate-x-1/2 -translate-y-1/2 rounded-full bg-white' />
+          <div className='absolute bottom-0 right-0 h-[600px] w-[600px] translate-x-1/3 translate-y-1/3 rounded-full bg-white' />
+          <div className='absolute left-1/3 top-1/2 h-64 w-64 rounded-full bg-white' />
         </div>
-    );
+
+        <div className='relative z-10 flex w-full flex-col items-center justify-center p-12 text-white'>
+          <div className='mb-8 w-32 rounded-2xl bg-white/20 p-4 shadow-2xl ring-1 ring-white/30 backdrop-blur-sm'>
+            <Image src='/logo-serviciudad.png' alt='SERVICIUDAD ESP' width={128} height={128} className='h-full w-full object-contain' />
+          </div>
+
+          <h1 className='mb-4 text-center text-4xl font-bold xl:text-5xl'>SERVICIUDAD</h1>
+          <p className='mb-2 text-center text-xl text-white/80'>Empresa de Servicios Públicos</p>
+          <div className='my-6 h-1 w-24 rounded-full bg-white/30' />
+          <p className='max-w-md text-center text-lg text-white/70'>Sistema de Actas de Revisión de Activos Fijos</p>
+
+          <div className='mt-12 max-w-md space-y-4'>
+            {[
+              'Registro fotográfico de evidencias',
+              'Firma digital dual',
+              'Generación automática de actas PDF',
+            ].map((feature) => (
+              <div key={feature} className='flex items-center gap-3 text-white/80'>
+                <div className='h-2 w-2 rounded-full bg-white/60' />
+                <span>{feature}</span>
+              </div>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div className='relative flex w-full items-center justify-center bg-background p-6 lg:w-1/2 lg:p-12 xl:w-2/5'>
+        <div className='absolute left-1/2 top-8 -translate-x-1/2 lg:hidden'>
+          <div className='w-16 rounded-xl bg-primary/15 p-2 ring-1 ring-primary/20'>
+            <Image src='/logo-serviciudad.png' alt='SERVICIUDAD ESP' width={64} height={64} className='h-full w-full object-contain' />
+          </div>
+        </div>
+
+        <div className='w-full max-w-md'>
+          <div className='mt-16 text-center lg:hidden'>
+            <h1 className='text-2xl font-bold text-foreground'>SERVICIUDAD ESP</h1>
+            <p className='mt-1 text-muted-foreground'>Sistema de Actas</p>
+          </div>
+
+          <div className='overflow-hidden rounded-2xl border border-border/50 glass-strong shadow-elegant-xl'>
+            <div className='p-8'>
+              <div className='mb-8 hidden lg:block'>
+                <h2 className='text-2xl font-bold text-foreground'>Bienvenido</h2>
+                <p className='mt-1 text-muted-foreground'>Ingrese sus credenciales para continuar.</p>
+              </div>
+
+              <LoginForm />
+            </div>
+
+            <div className='border-t border-border/50 bg-muted/30 px-8 py-5'>
+              <p className='text-center text-xs text-muted-foreground'>
+                ¿No tiene acceso? <span className='font-medium text-primary'>Contacte al administrador de TI</span>
+              </p>
+            </div>
+          </div>
+
+          <p className='mt-6 text-center text-xs text-muted-foreground'>
+            © {new Date().getFullYear()} SERVICIUDAD ESP. Todos los derechos reservados.
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }

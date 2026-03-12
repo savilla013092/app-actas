@@ -1,322 +1,310 @@
-import {
-    collection,
-    doc,
-    addDoc,
-    updateDoc,
-    getDoc,
-    getDocs,
-    query,
-    where,
-    orderBy,
-    Timestamp,
-    serverTimestamp,
+﻿import {
+  collection,
+  doc,
+  getCountFromServer,
+  getDoc,
+  getDocs,
+  limit,
+  orderBy,
+  query,
+  QueryConstraint,
+  startAfter,
+  where,
 } from 'firebase/firestore';
-import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
-import { db, storage } from '@/lib/firebase/config';
-import { Revision, Evidencia, FirmaDigital } from '@/types/revision';
-import { calcularHash } from '@/lib/utils/hash';
-import { obtenerIPCliente } from '@/lib/utils/ip';
+import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
 
+import { db, storage } from '@/lib/firebase/config';
+import { callCallable } from '@/services/callableService';
+import { Evidencia, Revision } from '@/types/revision';
+
 const COLLECTION = 'revisiones';
+const DEFAULT_PAGE_SIZE = 50;
+const IMAGE_UPLOAD_OPTIONS = {
+  maxSizeMB: 1,
+  maxWidthOrHeight: 1920,
+  useWebWorker: true,
+};
 
-// Crear nueva revisión (borrador)
-export async function crearRevision(data: Omit<Revision, 'id' | 'creadoEn' | 'actualizadoEn' | 'evidencias'>): Promise<string> {
-    const docRef = await addDoc(collection(db, COLLECTION), {
-        ...data,
-        estado: 'borrador',
-        evidencias: [],
-        creadoEn: serverTimestamp(),
-        actualizadoEn: serverTimestamp(),
-    });
-    return docRef.id;
+const mapRevision = (docId: string, data: Record<string, unknown>) => ({
+  id: docId,
+  ...data,
+}) as Revision;
+
+const buildRevisionFilters = ({
+  custodioId,
+  onlyPendingCustodian,
+}: {
+  custodioId?: string;
+  onlyPendingCustodian?: boolean;
+}): QueryConstraint[] => {
+  const constraints: QueryConstraint[] = [];
+
+  if (custodioId) {
+    constraints.push(where('custodioId', '==', custodioId));
+  }
+
+  if (onlyPendingCustodian) {
+    constraints.push(where('estado', '==', 'pendiente_firma_custodio'));
+  }
+
+  return constraints;
+};
+
+export interface PaginatedRevisionesOptions {
+  custodioId?: string;
+  onlyPendingCustodian?: boolean;
+  cursor?: Revision['fecha'] | null;
+  pageSize?: number;
 }
 
-// Subir evidencia fotográfica
+export interface PaginatedRevisionesResult {
+  items: Revision[];
+  nextCursor: Revision['fecha'] | null;
+  hasMore: boolean;
+  totalCount: number;
+}
+
+export async function crearRevision(
+  data: Omit<Revision, 'id' | 'creadoEn' | 'actualizadoEn' | 'evidencias'>
+): Promise<string> {
+  const response = await callCallable<
+    Record<string, unknown>,
+    { id: string }
+  >('createRevisionDraft', {
+    ...data,
+    fecha: new Date(data.fecha).toISOString(),
+  });
+
+  return response.id;
+}
+
 export async function subirEvidencia(
-    revisionId: string,
-    archivo: File,
-    nombre: string,
-    descripcion?: string
+  revisionId: string,
+  archivo: File,
+  nombre: string,
+  descripcion?: string
 ): Promise<Evidencia> {
-    // Comprimir imagen
-    const opciones = {
-        maxSizeMB: 1,
-        maxWidthOrHeight: 1920,
-        useWebWorker: true,
-    };
-    const archivoComprimido = await imageCompression(archivo, opciones);
+  const archivoComprimido = await imageCompression(archivo, IMAGE_UPLOAD_OPTIONS);
+  const nombreArchivo = `${Date.now()}_${archivo.name}`;
+  const storagePath = `evidencias/${revisionId}/${nombreArchivo}`;
+  const storageRef = ref(storage, storagePath);
 
-    // Subir a Storage
-    const nombreArchivo = `${Date.now()}_${archivo.name}`;
-    const storageRef = ref(storage, `evidencias/${revisionId}/${nombreArchivo}`);
-    await uploadBytes(storageRef, archivoComprimido);
-    const url = await getDownloadURL(storageRef);
+  await uploadBytes(storageRef, archivoComprimido);
+  const url = await getDownloadURL(storageRef);
 
-    const evidencia: Evidencia = {
-        id: nombreArchivo,
-        url,
-        nombre,
-        descripcion,
-        subidaEn: new Date(),
-    };
+  await callCallable<
+    { revisionId: string; evidences: Array<{ id: string; storagePath: string; url: string; nombre: string; descripcion?: string }> },
+    { count: number }
+  >('registerRevisionEvidence', {
+    revisionId,
+    evidences: [{ id: nombreArchivo, storagePath, url, nombre, descripcion }],
+  });
 
-    // Actualizar documento con nueva evidencia
-    const revisionRef = doc(db, COLLECTION, revisionId);
-    const revisionDoc = await getDoc(revisionRef);
-    const evidenciasActuales = revisionDoc.data()?.evidencias || [];
-
-    await updateDoc(revisionRef, {
-        evidencias: [...evidenciasActuales, evidencia],
-        actualizadoEn: serverTimestamp(),
-    });
-
-    return evidencia;
+  return {
+    id: nombreArchivo,
+    url,
+    nombre,
+    descripcion,
+    subidaEn: new Date(),
+  };
 }
 
-// Firmar como revisor (Profesional de Logística)
 export async function firmarComoRevisor(
-    revisionId: string,
-    firmaDataUrl: string,
-    datosRevision: object
+  revisionId: string,
+  firmaDataUrl: string,
+  _datosRevision: object
 ): Promise<void> {
-    // Calcular hash del documento
-    const hashDocumento = await calcularHash(JSON.stringify(datosRevision));
+  const blob = await (await fetch(firmaDataUrl)).blob();
+  const storagePath = `firmas/${revisionId}/revisor.png`;
+  const storageRef = ref(storage, storagePath);
 
-    // Obtener IP del cliente
-    const ipCliente = await obtenerIPCliente();
+  await uploadBytes(storageRef, blob, { contentType: 'image/png' });
+  const url = await getDownloadURL(storageRef);
 
-    // Subir imagen de firma
-    const blob = await (await fetch(firmaDataUrl)).blob();
-    const storageRef = ref(storage, `firmas/${revisionId}/revisor.png`);
-    await uploadBytes(storageRef, blob);
-    const urlFirma = await getDownloadURL(storageRef);
-
-    const firma: FirmaDigital = {
-        url: urlFirma,
-        fechaFirma: new Date(),
-        ipCliente,
-        userAgent: navigator.userAgent,
-        hashDocumento,
-        declaracionAceptada: true,
-    };
-
-    await updateDoc(doc(db, COLLECTION, revisionId), {
-        firmaRevisor: firma,
-        estado: 'pendiente_firma_custodio',
-        actualizadoEn: serverTimestamp(),
-    });
+  await callCallable<
+    { revisionId: string; storagePath: string; url: string },
+    { ok: boolean }
+  >('registerReviewerSignature', {
+    revisionId,
+    storagePath,
+    url,
+  });
 }
 
-// Firmar como custodio
 export async function firmarComoCustodio(
-    revisionId: string,
-    firmaDataUrl: string,
-    datosRevision: object,
-    datosFirmante?: { nombre: string; cedula: string }
+  revisionId: string,
+  firmaDataUrl: string,
+  _datosRevision: object,
+  datosFirmante?: { nombre: string; cedula: string }
 ): Promise<void> {
-    const hashDocumento = await calcularHash(JSON.stringify(datosRevision));
+  if (!datosFirmante?.nombre?.trim() || !datosFirmante?.cedula?.trim()) {
+    throw new Error('FIRMANTE_REQUIRED');
+  }
 
-    // Obtener IP del cliente
-    const ipCliente = await obtenerIPCliente();
+  const blob = await (await fetch(firmaDataUrl)).blob();
+  const storagePath = `firmas/${revisionId}/custodio.png`;
+  const storageRef = ref(storage, storagePath);
 
-    const blob = await (await fetch(firmaDataUrl)).blob();
-    const storageRef = ref(storage, `firmas/${revisionId}/custodio.png`);
-    await uploadBytes(storageRef, blob);
-    const urlFirma = await getDownloadURL(storageRef);
+  await uploadBytes(storageRef, blob, { contentType: 'image/png' });
+  const url = await getDownloadURL(storageRef);
 
-    const firma: FirmaDigital = {
-        url: urlFirma,
-        fechaFirma: new Date(),
-        ipCliente,
-        userAgent: navigator.userAgent,
-        hashDocumento,
-        declaracionAceptada: true,
-    };
-
-    // Preparar datos de actualización
-    const updateData: Record<string, unknown> = {
-        firmaCustodio: firma,
-        estado: 'firmada_completa', // Cloud Function detectará esto y generará el PDF
-        actualizadoEn: serverTimestamp(),
-    };
-
-    // Si se proporcionan datos del firmante, actualizar nombre y cédula del custodio
-    if (datosFirmante) {
-        updateData.custodioNombre = datosFirmante.nombre;
-        updateData.custodioCedula = datosFirmante.cedula;
-    }
-
-    await updateDoc(doc(db, COLLECTION, revisionId), updateData);
+  await callCallable<
+    { revisionId: string; storagePath: string; url: string; nombre: string; cedula: string },
+    { ok: boolean }
+  >('registerCustodianSignature', {
+    revisionId,
+    storagePath,
+    url,
+    nombre: datosFirmante.nombre.trim(),
+    cedula: datosFirmante.cedula.trim(),
+  });
 }
 
-// Obtener revisiones por custodio (para que firme) - Sin índice compuesto
 export async function obtenerRevisionesPendientesFirma(custodioId: string): Promise<Revision[]> {
-    try {
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        const revisiones = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-            .filter(r => r.custodioId === custodioId && r.estado === 'pendiente_firma_custodio')
-            .sort((a, b) => {
-                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? (a.fecha as { seconds: number }).seconds : 0;
-                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? (b.fecha as { seconds: number }).seconds : 0;
-                return fechaB - fechaA;
-            });
+  const snapshot = await getDocs(
+    query(
+      collection(db, COLLECTION),
+      where('custodioId', '==', custodioId),
+      where('estado', '==', 'pendiente_firma_custodio'),
+      orderBy('fecha', 'desc')
+    )
+  );
 
-        return revisiones;
-    } catch (error) {
-        console.error('Error obteniendo revisiones pendientes de firma:', error);
-        return [];
-    }
+  return snapshot.docs.map((docSnapshot) => mapRevision(docSnapshot.id, docSnapshot.data()));
 }
 
-// Obtener revisiones creadas por el revisor - Sin índice compuesto
 export async function obtenerRevisionesPorRevisor(revisorId: string): Promise<Revision[]> {
-    try {
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        const revisiones = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-            .filter(r => r.revisorId === revisorId)
-            .sort((a, b) => {
-                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? (a.fecha as { seconds: number }).seconds : 0;
-                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? (b.fecha as { seconds: number }).seconds : 0;
-                return fechaB - fechaA;
-            });
+  const snapshot = await getDocs(
+    query(
+      collection(db, COLLECTION),
+      where('revisorId', '==', revisorId),
+      orderBy('fecha', 'desc')
+    )
+  );
 
-        return revisiones;
-    } catch (error) {
-        console.error('Error obteniendo revisiones por revisor:', error);
-        return [];
-    }
+  return snapshot.docs.map((docSnapshot) => mapRevision(docSnapshot.id, docSnapshot.data()));
 }
 
-// Obtener revisión por ID
 export async function obtenerRevision(id: string): Promise<Revision | null> {
-    const docSnap = await getDoc(doc(db, COLLECTION, id));
-    if (!docSnap.exists()) return null;
-    return { id: docSnap.id, ...docSnap.data() } as Revision;
+  const docSnap = await getDoc(doc(db, COLLECTION, id));
+  if (!docSnap.exists()) return null;
+  return mapRevision(docSnap.id, docSnap.data());
 }
 
-// Obtener revisiones por activo - Sin índice compuesto
 export async function obtenerRevisionesPorActivo(activoId: string): Promise<Revision[]> {
-    try {
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        const revisiones = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-            .filter(r => r.activoId === activoId)
-            .sort((a, b) => {
-                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? (a.fecha as { seconds: number }).seconds : 0;
-                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? (b.fecha as { seconds: number }).seconds : 0;
-                return fechaB - fechaA;
-            });
+  const snapshot = await getDocs(
+    query(
+      collection(db, COLLECTION),
+      where('activoId', '==', activoId),
+      orderBy('fecha', 'desc')
+    )
+  );
 
-        return revisiones;
-    } catch (error) {
-        console.error('Error obteniendo revisiones por activo:', error);
-        return [];
-    }
+  return snapshot.docs.map((docSnapshot) => mapRevision(docSnapshot.id, docSnapshot.data()));
 }
 
-// Obtener todas las revisiones (ordenadas por fecha, más recientes primero)
-export async function obtenerTodasLasRevisiones(): Promise<Revision[]> {
-    try {
-        console.log('Obteniendo todas las revisiones...');
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        console.log(`Se encontraron ${snapshot.docs.length} revisiones en Firestore`);
+export async function obtenerRevisionesPaginadas({
+  custodioId,
+  onlyPendingCustodian = false,
+  cursor = null,
+  pageSize = DEFAULT_PAGE_SIZE,
+}: PaginatedRevisionesOptions = {}): Promise<PaginatedRevisionesResult> {
+  const collectionRef = collection(db, COLLECTION);
+  const filterConstraints = buildRevisionFilters({ custodioId, onlyPendingCustodian });
+  const pageConstraints: QueryConstraint[] = [
+    ...filterConstraints,
+    orderBy('fecha', 'desc'),
+  ];
 
-        const revisiones = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-            .sort((a, b) => {
-                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? (a.fecha as { seconds: number }).seconds : 0;
-                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? (b.fecha as { seconds: number }).seconds : 0;
-                return fechaB - fechaA;
-            });
-        return revisiones;
-    } catch (error) {
-        console.error('Error obteniendo todas las revisiones:', error);
-        return [];
-    }
+  if (cursor) {
+    pageConstraints.push(startAfter(cursor));
+  }
+
+  pageConstraints.push(limit(pageSize));
+
+  const [snapshot, countSnapshot] = await Promise.all([
+    getDocs(query(collectionRef, ...pageConstraints)),
+    getCountFromServer(query(collectionRef, ...filterConstraints)),
+  ]);
+
+  const items = snapshot.docs.map((docSnapshot) => mapRevision(docSnapshot.id, docSnapshot.data()));
+  const nextCursor = items.length > 0 ? items[items.length - 1].fecha ?? null : null;
+
+  return {
+    items,
+    nextCursor,
+    hasMore: items.length === pageSize && nextCursor !== null,
+    totalCount: countSnapshot.data().count,
+  };
 }
 
-// Obtener estadísticas del dashboard
 export async function obtenerEstadisticasRevisiones(): Promise<{
-    totalRevisiones: number;
-    pendientesFirma: number;
-    actasMalEstado: number;
-    actasCompletadas: number;
+  totalRevisiones: number;
+  pendientesFirma: number;
+  actasMalEstado: number;
+  actasCompletadas: number;
 }> {
-    try {
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        const revisiones = snapshot.docs.map(doc => doc.data());
+  const collectionRef = collection(db, COLLECTION);
+  const [
+    totalSnapshot,
+    pendientesSnapshot,
+    malEstadoSnapshot,
+    completadasSnapshot,
+  ] = await Promise.all([
+    getCountFromServer(query(collectionRef)),
+    getCountFromServer(query(collectionRef, where('estado', '==', 'pendiente_firma_custodio'))),
+    getCountFromServer(query(collectionRef, where('estadoActivo', 'in', ['malo', 'para_baja']))),
+    getCountFromServer(query(collectionRef, where('estado', '==', 'completada'))),
+  ]);
 
-        return {
-            totalRevisiones: revisiones.length,
-            pendientesFirma: revisiones.filter(r => r.estado === 'pendiente_firma_custodio').length,
-            actasMalEstado: revisiones.filter(r => r.estadoActivo === 'malo' || r.estadoActivo === 'para_baja').length,
-            actasCompletadas: revisiones.filter(r => r.estado === 'completada').length,
-        };
-    } catch (error) {
-        console.error('Error obteniendo estadísticas:', error);
-        return {
-            totalRevisiones: 0,
-            pendientesFirma: 0,
-            actasMalEstado: 0,
-            actasCompletadas: 0,
-        };
-    }
+  return {
+    totalRevisiones: totalSnapshot.data().count,
+    pendientesFirma: pendientesSnapshot.data().count,
+    actasMalEstado: malEstadoSnapshot.data().count,
+    actasCompletadas: completadasSnapshot.data().count,
+  };
 }
 
-// Obtener revisiones recientes (últimas 5) - Sin índice compuesto
-export async function obtenerRevisionesRecientes(limite: number = 5): Promise<Revision[]> {
-    try {
-        // Obtener todas y filtrar en cliente para evitar índice compuesto
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        const revisiones = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-            .filter(r => r.estado === 'completada')
-            .sort((a, b) => {
-                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? (a.fecha as { seconds: number }).seconds : 0;
-                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? (b.fecha as { seconds: number }).seconds : 0;
-                return fechaB - fechaA;
-            })
-            .slice(0, limite);
+export async function obtenerRevisionesRecientes(itemLimit = 5): Promise<Revision[]> {
+  const snapshot = await getDocs(
+    query(
+      collection(db, COLLECTION),
+      where('estado', '==', 'completada'),
+      orderBy('fecha', 'desc'),
+      limit(itemLimit)
+    )
+  );
 
-        return revisiones;
-    } catch (error) {
-        console.error('Error obteniendo revisiones recientes:', error);
-        return [];
-    }
+  return snapshot.docs.map((docSnapshot) => mapRevision(docSnapshot.id, docSnapshot.data()));
 }
 
-// Obtener revisiones pendientes de firma (para todos los custodios) - Sin índice compuesto
-export async function obtenerTodasPendientesFirma(): Promise<Revision[]> {
-    try {
-        // Obtener todas y filtrar en cliente para evitar índice compuesto
-        const snapshot = await getDocs(collection(db, COLLECTION));
-        const revisiones = snapshot.docs
-            .map(doc => ({ id: doc.id, ...doc.data() } as Revision))
-            .filter(r => r.estado === 'pendiente_firma_custodio')
-            .sort((a, b) => {
-                const fechaA = a.fecha && typeof a.fecha === 'object' && 'seconds' in a.fecha
-                    ? (a.fecha as { seconds: number }).seconds : 0;
-                const fechaB = b.fecha && typeof b.fecha === 'object' && 'seconds' in b.fecha
-                    ? (b.fecha as { seconds: number }).seconds : 0;
-                return fechaB - fechaA;
-            });
+export async function obtenerTodasPendientesFirma(limitItems?: number): Promise<Revision[]> {
+  const constraints: QueryConstraint[] = [
+    where('estado', '==', 'pendiente_firma_custodio'),
+    orderBy('fecha', 'desc'),
+  ];
 
-        return revisiones;
-    } catch (error) {
-        console.error('Error obteniendo revisiones pendientes:', error);
-        return [];
-    }
+  if (limitItems) {
+    constraints.push(limit(limitItems));
+  }
+
+  const snapshot = await getDocs(query(collection(db, COLLECTION), ...constraints));
+  return snapshot.docs.map((docSnapshot) => mapRevision(docSnapshot.id, docSnapshot.data()));
+}
+
+export async function contarRevisionesPorEstadoProceso(estado: string): Promise<number> {
+  const snapshot = await getCountFromServer(query(collection(db, COLLECTION), where('estado', '==', estado)));
+  return snapshot.data().count;
+}
+
+export async function contarRevisionesPorMes(inicio: Date, fin: Date): Promise<number> {
+  const snapshot = await getCountFromServer(
+    query(
+      collection(db, COLLECTION),
+      where('fecha', '>=', inicio),
+      where('fecha', '<', fin)
+    )
+  );
+  return snapshot.data().count;
 }

@@ -37,9 +37,9 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 };
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.generarActaPDF = generarActaPDF;
-const pdfkit_1 = __importDefault(require("pdfkit"));
-const path = __importStar(require("path"));
 const fs = __importStar(require("fs"));
+const path = __importStar(require("path"));
+const pdfkit_1 = __importDefault(require("pdfkit"));
 function extractStoragePath(url, bucketName) {
     if (url.includes('firebasestorage.googleapis.com')) {
         const match = url.match(/\/o\/([^?]+)/);
@@ -47,10 +47,17 @@ function extractStoragePath(url, bucketName) {
             return decodeURIComponent(match[1]);
         }
     }
-    else if (url.includes('storage.googleapis.com')) {
-        return url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+    if (url.includes('storage.googleapis.com')) {
+        const withoutBucket = url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+        return decodeURIComponent(withoutBucket.split('?')[0]);
     }
-    return decodeURIComponent(url);
+    return decodeURIComponent(url.split('?')[0]);
+}
+function asDate(value) {
+    if (value && typeof value === 'object' && 'toDate' in value) {
+        return value.toDate();
+    }
+    return new Date(value);
 }
 async function generarActaPDF({ numeroActa, revision, storage }) {
     return new Promise(async (resolve, reject) => {
@@ -65,33 +72,26 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             doc.on('error', reject);
             const bucket = storage.bucket();
             const bucketName = bucket.name;
-            console.log('Descargando firma del revisor:', revision.firmaRevisor.url);
             const firmaRevisorPath = extractStoragePath(revision.firmaRevisor.url, bucketName);
-            console.log('Path extraído:', firmaRevisorPath);
-            const [firmaRevisorBuffer] = await bucket.file(firmaRevisorPath).download();
-            console.log('Descargando firma del custodio:', revision.firmaCustodio.url);
             const firmaCustodioPath = extractStoragePath(revision.firmaCustodio.url, bucketName);
-            console.log('Path extraído:', firmaCustodioPath);
+            const [firmaRevisorBuffer] = await bucket.file(firmaRevisorPath).download();
             const [firmaCustodioBuffer] = await bucket.file(firmaCustodioPath).download();
             const evidenciasBuffers = [];
             for (const evidencia of revision.evidencias.slice(0, 4)) {
                 try {
                     const evidenciaPath = extractStoragePath(evidencia.url, bucketName);
-                    console.log('Descargando evidencia:', evidenciaPath);
                     const [buffer] = await bucket.file(evidenciaPath).download();
                     evidenciasBuffers.push(buffer);
                 }
-                catch (e) {
-                    console.warn('No se pudo descargar evidencia:', evidencia.url, e);
+                catch (error) {
+                    console.warn('No fue posible descargar una evidencia del PDF.', error);
                 }
             }
             const logoPath = path.join(__dirname, 'assets', 'serviciudad.jpg');
-            const logoExists = fs.existsSync(logoPath);
-            if (logoExists) {
+            if (fs.existsSync(logoPath)) {
                 const logoWidth = 150;
                 const logoHeight = 60;
-                const pageWidth = doc.page.width;
-                const logoX = (pageWidth - logoWidth) / 2;
+                const logoX = (doc.page.width - logoWidth) / 2;
                 doc.image(logoPath, logoX, 50, {
                     width: logoWidth,
                     height: logoHeight,
@@ -105,30 +105,30 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             }
             doc.fontSize(10).font('Helvetica');
             doc.text('NIT: 816.001.609-1', { align: 'center' });
-            doc.text('Dirección de Activos Fijos', { align: 'center' });
+            doc.text('Direccion de Activos Fijos', { align: 'center' });
             doc.moveDown();
             doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
             doc.moveDown();
             doc.fontSize(14).font('Helvetica-Bold');
-            doc.text('ACTA DE REVISIÓN DE ACTIVO FIJO', { align: 'center' });
+            doc.text('ACTA DE REVISION DE ACTIVO FIJO', { align: 'center' });
             doc.fontSize(12);
             doc.text(`No. ${numeroActa}`, { align: 'center' });
             doc.moveDown();
             doc.fontSize(11).font('Helvetica-Bold');
-            doc.text('INFORMACIÓN GENERAL');
+            doc.text('INFORMACION GENERAL');
             doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
             doc.moveDown(0.5);
-            doc.fontSize(10).font('Helvetica');
-            const fechaRevision = revision.fecha.toDate();
+            const fechaRevision = asDate(revision.fecha);
             const fechaFormateada = fechaRevision.toLocaleDateString('es-CO', {
                 day: 'numeric',
                 month: 'long',
-                year: 'numeric'
+                year: 'numeric',
             });
-            doc.text(`Fecha de revisión: ${fechaFormateada}`);
-            doc.text(`Código del activo: ${revision.codigoActivo}`);
-            doc.text(`Descripción: ${revision.descripcionActivo}`);
-            doc.text(`Ubicación: ${revision.ubicacionActivo}`);
+            doc.fontSize(10).font('Helvetica');
+            doc.text(`Fecha de revision: ${fechaFormateada}`);
+            doc.text(`Codigo del activo: ${revision.codigoActivo}`);
+            doc.text(`Descripcion: ${revision.descripcionActivo}`);
+            doc.text(`Ubicacion: ${revision.ubicacionActivo}`);
             doc.moveDown();
             doc.fontSize(11).font('Helvetica-Bold');
             doc.text('DATOS DEL CUSTODIO');
@@ -136,7 +136,7 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             doc.moveDown(0.5);
             doc.fontSize(10).font('Helvetica');
             doc.text(`Nombre: ${revision.custodioNombre}`);
-            doc.text(`Cédula: ${revision.custodioCedula}`);
+            doc.text(`Cedula: ${revision.custodioCedula}`);
             doc.text(`Cargo: ${revision.custodioCargo}`);
             doc.moveDown();
             doc.fontSize(11).font('Helvetica-Bold');
@@ -145,14 +145,13 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             doc.moveDown(0.5);
             doc.fontSize(10).font('Helvetica');
             doc.text(`Nombre: ${revision.revisorNombre}`);
-            doc.text(`Cédula: ${revision.revisorCedula}`);
+            doc.text(`Cedula: ${revision.revisorCedula}`);
             doc.text(`Cargo: ${revision.revisorCargo}`);
             doc.moveDown();
             doc.fontSize(11).font('Helvetica-Bold');
-            doc.text('RESULTADO DE LA REVISIÓN');
+            doc.text('RESULTADO DE LA REVISION');
             doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
             doc.moveDown(0.5);
-            doc.fontSize(10).font('Helvetica');
             const estadosTexto = {
                 excelente: 'EXCELENTE',
                 bueno: 'BUENO',
@@ -160,9 +159,10 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
                 malo: 'MALO',
                 para_baja: 'PARA BAJA',
             };
+            doc.fontSize(10).font('Helvetica');
             doc.text(`Estado del activo: ${estadosTexto[revision.estadoActivo] || revision.estadoActivo}`);
             doc.moveDown(0.5);
-            doc.font('Helvetica-Bold').text('Descripción de la revisión:');
+            doc.font('Helvetica-Bold').text('Descripcion de la revision:');
             doc.font('Helvetica').text(revision.descripcion);
             if (revision.observaciones) {
                 doc.moveDown(0.5);
@@ -172,26 +172,26 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             doc.moveDown();
             if (evidenciasBuffers.length > 0) {
                 doc.fontSize(11).font('Helvetica-Bold');
-                doc.text('REGISTRO FOTOGRÁFICO');
+                doc.text('REGISTRO FOTOGRAFICO');
                 doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
                 doc.moveDown(0.5);
                 const imageWidth = 240;
                 const imageHeight = 180;
                 let x = 50;
                 let y = doc.y;
-                for (let i = 0; i < evidenciasBuffers.length; i++) {
-                    if (i > 0 && i % 2 === 0) {
+                for (let index = 0; index < evidenciasBuffers.length; index += 1) {
+                    if (index > 0 && index % 2 === 0) {
                         y += imageHeight + 20;
                         x = 50;
                     }
                     try {
-                        doc.image(evidenciasBuffers[i], x, y, {
+                        doc.image(evidenciasBuffers[index], x, y, {
                             width: imageWidth,
                             height: imageHeight,
                             fit: [imageWidth, imageHeight],
                         });
                     }
-                    catch (e) {
+                    catch (_a) {
                         doc.rect(x, y, imageWidth, imageHeight).stroke();
                         doc.text('Imagen no disponible', x + 10, y + imageHeight / 2);
                     }
@@ -201,15 +201,13 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             }
             doc.addPage();
             doc.fontSize(11).font('Helvetica-Bold');
-            doc.text('DECLARACIÓN Y CONSTANCIA');
+            doc.text('DECLARACION Y CONSTANCIA');
             doc.moveTo(50, doc.y).lineTo(562, doc.y).stroke();
             doc.moveDown(0.5);
             doc.fontSize(10).font('Helvetica');
-            doc.text('El profesional de logística certifica que realizó la revisión física del activo y que la información ' +
-                'registrada corresponde al estado real del mismo al momento de la inspección.', { align: 'justify' });
+            doc.text('El profesional de logistica certifica que realizo la revision fisica del activo y que la informacion registrada corresponde al estado real del mismo al momento de la inspeccion.', { align: 'justify' });
             doc.moveDown(0.5);
-            doc.text('El custodio certifica que la información registrada es veraz y acepta la responsabilidad sobre el ' +
-                'activo a su cargo en el estado descrito.', { align: 'justify' });
+            doc.text('El custodio certifica que la informacion registrada es veraz y acepta la responsabilidad sobre el activo a su cargo en el estado descrito.', { align: 'justify' });
             doc.moveDown(2);
             const firmaWidth = 200;
             const firmaHeight = 80;
@@ -223,10 +221,11 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             doc.fontSize(9);
             doc.text(revision.revisorNombre, 80, firmaY + firmaHeight + 10, { width: firmaWidth, align: 'center' });
             doc.text(`C.C. ${revision.revisorCedula}`, 80, doc.y, { width: firmaWidth, align: 'center' });
-            doc.text('Profesional Especializado en Logística', 80, doc.y, { width: firmaWidth, align: 'center' });
-            const fechaFirmaRevisorDate = revision.firmaRevisor.fechaFirma.toDate();
-            const fechaFirmaRevisor = fechaFirmaRevisorDate.toLocaleString('es-CO');
-            doc.fontSize(8).text(`Firmado: ${fechaFirmaRevisor}`, 80, doc.y, { width: firmaWidth, align: 'center' });
+            doc.text('Profesional Especializado en Logistica', 80, doc.y, { width: firmaWidth, align: 'center' });
+            doc.fontSize(8).text(`Firmado: ${asDate(revision.firmaRevisor.fechaFirma).toLocaleString('es-CO')}`, 80, doc.y, {
+                width: firmaWidth,
+                align: 'center',
+            });
             doc.image(firmaCustodioBuffer, 320, firmaY, {
                 width: firmaWidth,
                 height: firmaHeight,
@@ -237,17 +236,18 @@ async function generarActaPDF({ numeroActa, revision, storage }) {
             doc.text(revision.custodioNombre, 320, firmaY + firmaHeight + 10, { width: firmaWidth, align: 'center' });
             doc.text(`C.C. ${revision.custodioCedula}`, 320, doc.y, { width: firmaWidth, align: 'center' });
             doc.text('Custodio del Activo', 320, doc.y, { width: firmaWidth, align: 'center' });
-            const fechaFirmaCustodioDate = revision.firmaCustodio.fechaFirma.toDate();
-            const fechaFirmaCustodio = fechaFirmaCustodioDate.toLocaleString('es-CO');
-            doc.fontSize(8).text(`Firmado: ${fechaFirmaCustodio}`, 320, doc.y, { width: firmaWidth, align: 'center' });
+            doc.fontSize(8).text(`Firmado: ${asDate(revision.firmaCustodio.fechaFirma).toLocaleString('es-CO')}`, 320, doc.y, {
+                width: firmaWidth,
+                align: 'center',
+            });
             doc.fontSize(8).font('Helvetica');
             const bottomY = doc.page.height - 60;
             doc.moveTo(50, bottomY).lineTo(562, bottomY).stroke();
-            doc.text('Documento generado automáticamente por el Sistema de Activos Fijos - SERVICIUDAD ESP', 50, bottomY + 5, {
+            doc.text('Documento generado automaticamente por el Sistema de Activos Fijos - SERVICIUDAD ESP', 50, bottomY + 5, {
                 align: 'center',
                 width: 512,
             });
-            doc.text(`Hash de verificación: ${revision.firmaRevisor.hashDocumento.substring(0, 32)}...`, 50, doc.y, {
+            doc.text(`Hash de verificacion: ${revision.firmaRevisor.hashDocumento.substring(0, 32)}...`, 50, doc.y, {
                 align: 'center',
                 width: 512,
             });

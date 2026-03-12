@@ -1,107 +1,106 @@
-import * as XLSX from 'xlsx';
-import { saveAs } from 'file-saver';
-import { getAssetClassification } from '@/lib/utils/assetClassification';
+﻿import { getAssetClassification } from '@/lib/utils/assetClassification';
 import { getAssetLocation } from '@/lib/utils/assetLocation';
 
 export interface ExportColumn {
-    key: string;
-    header: string;
-    transform?: (value: any, row: any) => string | number;
+  key: string;
+  header: string;
+  transform?: (value: unknown, row: Record<string, unknown>) => string | number;
 }
 
-export function exportToExcel<T extends Record<string, any>>(
-    data: T[],
-    columns: ExportColumn[],
-    filename: string,
-    sheetName: string = 'Datos'
+export async function exportToExcel<T extends object>(
+  data: T[],
+  columns: ExportColumn[],
+  filename: string,
+  sheetName = 'Datos'
 ) {
-    const headers = columns.map(col => col.header);
-    
-    const rows = data.map(row => {
-        const newRow: Record<string, string | number> = {};
-        columns.forEach(col => {
-            const value = row[col.key];
-            newRow[col.header] = col.transform ? col.transform(value, row) : (value ?? '');
-        });
-        return newRow;
+  const [{ saveAs }, XLSX] = await Promise.all([import('file-saver'), import('xlsx')]);
+
+  const rows = data.map((row) => {
+    const source = row as Record<string, unknown>;
+    const newRow: Record<string, string | number> = {};
+
+    columns.forEach((column) => {
+      const value = source[column.key];
+      newRow[column.header] = column.transform ? column.transform(value, source) : (value as string | number) ?? '';
     });
 
-    const worksheet = XLSX.utils.json_to_sheet(rows, { header: headers });
-    
-    const colWidths = columns.map(col => ({
-        wch: Math.max(col.header.length, 15)
-    }));
-    worksheet['!cols'] = colWidths;
+    return newRow;
+  });
 
-    const workbook = XLSX.utils.book_new();
-    XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+  const worksheet = XLSX.utils.json_to_sheet(rows, { header: columns.map((column) => column.header) });
+  worksheet['!cols'] = columns.map((column) => ({ wch: Math.max(column.header.length, 15) }));
 
-    const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
-    const blob = new Blob([excelBuffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-    
-    const timestamp = new Date().toISOString().split('T')[0];
-    saveAs(blob, `${filename}_${timestamp}.xlsx`);
+  const workbook = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(workbook, worksheet, sheetName);
+
+  const excelBuffer = XLSX.write(workbook, { bookType: 'xlsx', type: 'array' });
+  const blob = new Blob([excelBuffer], {
+    type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  });
+
+  const timestamp = new Date().toISOString().split('T')[0];
+  saveAs(blob, `${filename}_${timestamp}.xlsx`);
 }
 
 export const activosExportColumns: ExportColumn[] = [
-    { key: 'codigo', header: 'Codigo' },
-    { key: 'descripcion', header: 'Descripcion' },
-    {
-        key: 'categoria',
-        header: 'Categoria',
-        transform: (_value, row) => getAssetClassification(row.codigo, row.categoria).classificationName,
-    },
-    { key: 'marca', header: 'Marca' },
-    { key: 'modelo', header: 'Modelo' },
-    { key: 'serial', header: 'Serial' },
-    {
-        key: 'ubicacion',
-        header: 'Ubicacion',
-        transform: (value) => getAssetLocation(value).locationName,
-    },
-    { key: 'dependencia', header: 'Dependencia' },
-    { key: 'custodioNombre', header: 'Custodio' },
-    { key: 'estado', header: 'Estado', transform: (v) => v?.toUpperCase() || 'N/A' },
-    { 
-        key: 'creadoEn', 
-        header: 'Fecha Registro',
-        transform: (v) => v ? new Date(v).toLocaleDateString('es-CO') : 'N/A'
-    },
+  { key: 'codigo', header: 'Codigo' },
+  { key: 'descripcion', header: 'Descripcion' },
+  {
+    key: 'categoria',
+    header: 'Categoria',
+    transform: (_value, row) => getAssetClassification(String(row.codigo || ''), row.categoria as string).classificationName,
+  },
+  { key: 'marca', header: 'Marca' },
+  { key: 'modelo', header: 'Modelo' },
+  { key: 'serial', header: 'Serial' },
+  {
+    key: 'ubicacion',
+    header: 'Ubicacion',
+    transform: (value) => getAssetLocation(value as string | number | null | undefined).locationName,
+  },
+  { key: 'dependencia', header: 'Dependencia' },
+  { key: 'custodioNombre', header: 'Custodio' },
+  { key: 'estado', header: 'Estado', transform: (value) => String(value || 'N/A').toUpperCase() },
+  {
+    key: 'creadoEn',
+    header: 'Fecha Registro',
+    transform: (value) => (value ? new Date(String(value)).toLocaleDateString('es-CO') : 'N/A'),
+  },
 ];
 
 export const revisionesExportColumns: ExportColumn[] = [
-    { key: 'numeroActa', header: 'Numero Acta', transform: (v) => v || 'Pendiente' },
-    { key: 'codigoActivo', header: 'Codigo Activo' },
-    { key: 'descripcionActivo', header: 'Descripcion Activo' },
-    { key: 'ubicacionActivo', header: 'Ubicacion' },
-    { key: 'custodioNombre', header: 'Custodio' },
-    { key: 'revisorNombre', header: 'Revisor' },
-    { key: 'estadoActivo', header: 'Estado Activo', transform: (v) => v?.toUpperCase() || 'N/A' },
-    { key: 'descripcion', header: 'Hallazgos' },
-    { key: 'observaciones', header: 'Observaciones' },
-    { 
-        key: 'fecha', 
-        header: 'Fecha Revision',
-        transform: (v) => {
-            if (!v) return 'N/A';
-            if (typeof v === 'object' && 'seconds' in v) {
-                return new Date(v.seconds * 1000).toLocaleDateString('es-CO');
-            }
-            return new Date(v).toLocaleDateString('es-CO');
-        }
+  { key: 'numeroActa', header: 'Numero Acta', transform: (value) => String(value || 'Pendiente') },
+  { key: 'codigoActivo', header: 'Codigo Activo' },
+  { key: 'descripcionActivo', header: 'Descripcion Activo' },
+  { key: 'ubicacionActivo', header: 'Ubicacion' },
+  { key: 'custodioNombre', header: 'Custodio' },
+  { key: 'revisorNombre', header: 'Revisor' },
+  { key: 'estadoActivo', header: 'Estado Activo', transform: (value) => String(value || 'N/A').toUpperCase() },
+  { key: 'descripcion', header: 'Hallazgos' },
+  { key: 'observaciones', header: 'Observaciones' },
+  {
+    key: 'fecha',
+    header: 'Fecha Revision',
+    transform: (value) => {
+      if (!value) return 'N/A';
+      if (typeof value === 'object' && value !== null && 'seconds' in value) {
+        return new Date((value as { seconds: number }).seconds * 1000).toLocaleDateString('es-CO');
+      }
+      return new Date(String(value)).toLocaleDateString('es-CO');
     },
-    { 
-        key: 'estado', 
-        header: 'Estado Proceso',
-        transform: (v) => {
-            const estados: Record<string, string> = {
-                'borrador': 'Borrador',
-                'pendiente_firma_custodio': 'Pendiente Firma',
-                'firmada_completa': 'Generando PDF',
-                'completada': 'Completada',
-                'error_generacion': 'Error',
-            };
-            return estados[v] || v || 'N/A';
-        }
+  },
+  {
+    key: 'estado',
+    header: 'Estado Proceso',
+    transform: (value) => {
+      const estados: Record<string, string> = {
+        borrador: 'Borrador',
+        pendiente_firma_custodio: 'Pendiente Firma',
+        firmada_completa: 'Generando PDF',
+        completada: 'Completada',
+        error_generacion: 'Error',
+      };
+      return estados[String(value)] || String(value || 'N/A');
     },
+  },
 ];

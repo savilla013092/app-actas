@@ -1,41 +1,96 @@
-rules_version = '2';
+﻿rules_version = '2';
 service firebase.storage {
   match /b/{bucket}/o {
-    function estaAutenticado() {
+    function isSignedIn() {
       return request.auth != null;
     }
 
-    function esAdminOLogistica() {
-      return estaAutenticado() &&
-        firestore.exists(/databases/(default)/documents/usuarios/$(request.auth.uid)) && (
-          firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data.rol == 'admin' ||
-          firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data.rol == 'logistica'
-        );
+    function hasManagedAccess() {
+      return isSignedIn() &&
+        request.auth.token.active == true &&
+        request.auth.token.role is string;
+    }
+
+    function isAdmin() {
+      return hasManagedAccess() && request.auth.token.role == 'admin';
+    }
+
+    function isLogistica() {
+      return hasManagedAccess() && request.auth.token.role == 'logistica';
+    }
+
+    function isCustodio() {
+      return hasManagedAccess() && request.auth.token.role == 'custodio';
+    }
+
+    function isAdminOrLogistica() {
+      return isAdmin() || isLogistica();
+    }
+
+    function revisionExists(revisionId) {
+      return firestore.exists(/databases/(default)/documents/revisiones/$(revisionId));
+    }
+
+    function revisionDoc(revisionId) {
+      return firestore.get(/databases/(default)/documents/revisiones/$(revisionId)).data;
+    }
+
+    function isOpenRevisionState(revisionId) {
+      return revisionExists(revisionId) &&
+        (revisionDoc(revisionId).estado == 'borrador' ||
+          revisionDoc(revisionId).estado == 'pendiente_firma_custodio');
+    }
+
+    function isRevisionCustodian(revisionId) {
+      return isCustodio() &&
+        revisionExists(revisionId) &&
+        revisionDoc(revisionId).custodioId == request.auth.uid;
     }
 
     match /evidencias/{revisionId}/{fileName} {
-      allow read: if estaAutenticado();
-      allow write: if estaAutenticado() &&
+      allow read: if isAdminOrLogistica() || isRevisionCustodian(revisionId);
+      allow write: if isAdminOrLogistica() &&
+        isOpenRevisionState(revisionId) &&
         request.resource.size < 5 * 1024 * 1024 &&
         request.resource.contentType.matches('image/.*');
     }
 
     match /firmas/{revisionId}/{fileName} {
-      allow read: if estaAutenticado();
-      allow write: if estaAutenticado() &&
+      allow read: if isAdminOrLogistica() || isRevisionCustodian(revisionId);
+
+      allow write: if fileName == 'revisor.png' &&
+        isAdminOrLogistica() &&
+        revisionExists(revisionId) &&
+        revisionDoc(revisionId).estado == 'borrador' &&
+        request.resource.size < 500 * 1024 &&
+        request.resource.contentType == 'image/png';
+
+      allow write: if fileName == 'custodio.png' &&
+        isRevisionCustodian(revisionId) &&
+        revisionDoc(revisionId).estado == 'pendiente_firma_custodio' &&
         request.resource.size < 500 * 1024 &&
         request.resource.contentType == 'image/png';
     }
 
     match /express_loans/{loanId}/{fileName} {
-      allow read: if esAdminOLogistica();
-      allow write: if esAdminOLogistica() &&
+      allow read: if isAdminOrLogistica();
+      allow write: if isAdminOrLogistica() &&
         request.resource.size < 5 * 1024 * 1024 &&
         request.resource.contentType.matches('image/.*');
     }
 
+    match /imports/asset-imports/{userId}/{fileName} {
+      allow read: if isAdmin();
+      allow write: if isAdmin() && request.auth.uid == userId &&
+        request.resource.size < 20 * 1024 * 1024 &&
+        (
+          request.resource.contentType == 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' ||
+          request.resource.contentType == 'application/vnd.ms-excel'
+        );
+    }
+
     match /actas/{fileName} {
-      allow read: if estaAutenticado();
+      allow read: if hasManagedAccess();
       allow write: if false;
     }
 
