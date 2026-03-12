@@ -1,6 +1,7 @@
 import * as XLSX from 'xlsx';
 import { saveAs } from 'file-saver';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { getAssetLocation } from '@/lib/utils/assetLocation';
 
 export interface ExportColumn {
     key: string;
@@ -53,7 +54,11 @@ export const activosExportColumns: ExportColumn[] = [
     { key: 'marca', header: 'Marca' },
     { key: 'modelo', header: 'Modelo' },
     { key: 'serial', header: 'Serial' },
-    { key: 'ubicacion', header: 'Ubicacion' },
+    {
+        key: 'ubicacion',
+        header: 'Ubicacion',
+        transform: (value) => getAssetLocation(value).locationName,
+    },
     { key: 'dependencia', header: 'Dependencia' },
     { key: 'custodioNombre', header: 'Custodio' },
     { key: 'estado', header: 'Estado', transform: (v) => v?.toUpperCase() || 'N/A' },

@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { getAssetLocation } from '@/lib/utils/assetLocation';
 import { exportToExcel, activosExportColumns } from '@/lib/utils/export';
 import { obtenerActivosPaginados } from '@/services/activoService';
 import { Activo } from '@/types/activo';
@@ -30,6 +31,9 @@ const PAGE_SIZE = 50;
 type ClassifiedActivo = Activo & {
     classificationCode?: string;
     classificationName: string;
+    locationCode?: string;
+    locationName: string;
+    locationMapped: boolean;
 };
 
 const mergeActivos = (current: Activo[], incoming: Activo[]) => {
@@ -237,10 +241,15 @@ export default function ActivosPage() {
     const classifiedActivos = useMemo<ClassifiedActivo[]>(() => {
         return activos.map(activo => {
             const classification = getAssetClassification(activo.codigo, activo.categoria);
+            const location = getAssetLocation(activo.ubicacion);
+
             return {
                 ...activo,
                 classificationCode: classification.classificationCode,
                 classificationName: classification.classificationName,
+                locationCode: location.locationCode,
+                locationName: location.locationName,
+                locationMapped: location.isMapped,
             };
         });
     }, [activos]);
@@ -254,7 +263,7 @@ export default function ActivosPage() {
     }, [classifiedActivos]);
 
     const uniqueUbicaciones = useMemo(() => {
-        const ubicaciones = Array.from(new Set(classifiedActivos.map(activo => activo.ubicacion).filter(Boolean)));
+        const ubicaciones = Array.from(new Set(classifiedActivos.map(activo => activo.locationName).filter(Boolean)));
         return ubicaciones
             .sort((a, b) => a.localeCompare(b))
             .map(ubicacion => ({ label: ubicacion, value: ubicacion }));
@@ -296,10 +305,11 @@ export default function ActivosPage() {
                 activo.codigo.toLowerCase().includes(normalizedSearch) ||
                 activo.descripcion.toLowerCase().includes(normalizedSearch) ||
                 activo.custodioNombre.toLowerCase().includes(normalizedSearch) ||
+                activo.locationName.toLowerCase().includes(normalizedSearch) ||
                 (activo.serial || '').toLowerCase().includes(normalizedSearch);
 
             const matchesCategoria = !filterValues.categoria || activo.classificationName === filterValues.categoria;
-            const matchesUbicacion = !filterValues.ubicacion || activo.ubicacion === filterValues.ubicacion;
+            const matchesUbicacion = !filterValues.ubicacion || activo.locationName === filterValues.ubicacion;
             const matchesEstado = !filterValues.estado || activo.estado === filterValues.estado;
 
             return matchesSearch && matchesCategoria && matchesUbicacion && matchesEstado;
@@ -515,7 +525,7 @@ export default function ActivosPage() {
                                                 <td className='px-4 py-3 align-top'>
                                                     <div className='flex items-start gap-2 text-sm text-foreground'>
                                                         <LucideMapPin size={14} className='mt-0.5 shrink-0 text-muted-foreground' />
-                                                        <span className='max-w-[220px] truncate'>{activo.ubicacion}</span>
+                                                        <span className='max-w-[220px] truncate'>{activo.locationName}</span>
                                                     </div>
                                                 </td>
                                                 <td className='px-4 py-3 align-top'>
@@ -579,7 +589,7 @@ export default function ActivosPage() {
                                         <span className='font-semibold text-muted-foreground'>Clasificacion:</span> {activo.classificationName}
                                     </p>
                                     <p className='text-foreground'>
-                                        <span className='font-semibold text-muted-foreground'>Ubicacion:</span> {activo.ubicacion}
+                                        <span className='font-semibold text-muted-foreground'>Ubicacion:</span> {activo.locationName}
                                     </p>
                                 </div>
 

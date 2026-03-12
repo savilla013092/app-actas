@@ -12,6 +12,7 @@ import Link from 'next/link';
 import { useRouter } from 'next/navigation';
 import * as XLSX from 'xlsx';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { getAssetLocation } from '@/lib/utils/assetLocation';
 
 export default function ImportarPage() {
     const router = useRouter();
@@ -150,7 +151,7 @@ export default function ImportarPage() {
                     codigo: `AF-${String(fila[COL.CODIGO])}`,
                     descripcion: fila[COL.DESCRIPCION] || 'Sin descripciÃƒÆ’Ã‚Â³n',
                     categoria: getAssetClassification(String(fila[COL.CODIGO] || '')).classificationName,
-                    ubicacion: `UbicaciÃƒÆ’Ã‚Â³n ${fila[COL.UBICACION] || 'Sin asignar'}`,
+                    ubicacion: getAssetLocation(fila[COL.UBICACION] as string | number | null | undefined).locationName,
                     dependencia: 'DirecciÃƒÆ’Ã‚Â³n Administrativa',
                     custodioId: custodioId,
                     custodioNombre: 'Custodio General',

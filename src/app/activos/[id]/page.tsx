@@ -15,6 +15,7 @@ import { PageHeader } from '@/components/layout/PageHeader';
 import { LucideBox, LucideHistory, LucideUser, LucideMapPin, LucideFileText, LucideClipboardCheck } from 'lucide-react';
 import Link from 'next/link';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { getAssetLocation } from '@/lib/utils/assetLocation';
 
 export default function ActivoDetailPage() {
     const { id } = useParams();
@@ -80,6 +81,7 @@ export default function ActivoDetailPage() {
     }
 
     const assetClassification = getAssetClassification(activo.codigo, activo.categoria);
+    const assetLocation = getAssetLocation(activo.ubicacion);
 
     const breadcrumbItems = [
         { label: 'Activos', href: '/activos', icon: <LucideBox size={14} /> },
@@ -134,7 +136,7 @@ export default function ActivoDetailPage() {
                                 <p className="text-xs text-muted-foreground font-bold uppercase tracking-wider mb-1">Ubicación / Dependencia</p>
                                 <div className="flex items-center gap-2">
                                     <LucideMapPin size={16} className="text-muted-foreground" />
-                                    <p className="text-foreground font-medium">{activo.ubicacion} - {activo.dependencia}</p>
+                                    <p className="text-foreground font-medium">{assetLocation.locationName} - {activo.dependencia}</p>
                                 </div>
                             </div>
                         </div>

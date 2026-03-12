@@ -9,6 +9,9 @@ const path = require('path');
 const fs = require('fs');
 const os = require('os');
 const assetClassificationMap = require('../src/lib/constants/assetClassificationMap.json');
+const locationCatalog = require('../src/lib/constants/locationCatalog.json');
+
+const UNKNOWN_LOCATION = 'Sin asignar';
 
 function initializeFirebaseAdmin() {
     if (admin.apps.length > 0) {
@@ -59,6 +62,79 @@ function obtenerCategoria(codigoActivo, categoriaFallback) {
     }
 
     return 'Sin clasificacion';
+}
+
+function normalizeLocationText(value) {
+    return String(value)
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .trim()
+        .toLowerCase();
+}
+
+function normalizeLocationCode(value) {
+    if (value === undefined || value === null) {
+        return undefined;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+        return undefined;
+    }
+
+    if (/^\d+$/.test(raw)) {
+        return String(Number(raw));
+    }
+
+    const normalizedText = normalizeLocationText(raw);
+    const legacyMatch = normalizedText.match(/^ubicacion\s+(\d+)$/);
+    if (legacyMatch) {
+        return String(Number(legacyMatch[1]));
+    }
+
+    return undefined;
+}
+
+const normalizedNameToLocation = new Map();
+for (const [code, name] of Object.entries(locationCatalog)) {
+    const normalizedName = normalizeLocationText(name);
+    if (!normalizedNameToLocation.has(normalizedName)) {
+        normalizedNameToLocation.set(normalizedName, { code, name });
+    }
+}
+
+function obtenerUbicacion(value) {
+    if (value === undefined || value === null) {
+        return UNKNOWN_LOCATION;
+    }
+
+    const raw = String(value).trim();
+    if (!raw) {
+        return UNKNOWN_LOCATION;
+    }
+
+    const normalizedText = normalizeLocationText(raw);
+    if (normalizedText === normalizeLocationText(UNKNOWN_LOCATION) || normalizedText === 'ubicacion sin asignar') {
+        return UNKNOWN_LOCATION;
+    }
+
+    const locationCode = normalizeLocationCode(raw);
+    if (locationCode) {
+        if (locationCatalog[locationCode]) {
+            return locationCatalog[locationCode];
+        }
+
+        return UNKNOWN_LOCATION;
+    }
+
+    const knownLocation = normalizedNameToLocation.get(normalizedText);
+    if (knownLocation) {
+        return knownLocation.name;
+    }
+
+    return raw;
 }
 
 function convertirFechaExcel(fechaExcel) {
@@ -186,7 +262,7 @@ async function importarActivos() {
                 marca: fila[COL.MARCA] || undefined,
                 modelo: fila[COL.MODELO] || undefined,
                 serial: fila[COL.SERIAL] || undefined,
-                ubicacion: `Ubicacion ${fila[COL.UBICACION] || 'Sin asignar'}`,
+                ubicacion: obtenerUbicacion(fila[COL.UBICACION]),
                 dependencia: 'Direccion Administrativa',
                 custodioId,
                 custodioNombre: 'Custodio General',

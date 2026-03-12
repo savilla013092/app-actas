@@ -21,6 +21,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { Activo } from "@/types/activo";
 import { CreateExpressLoanDTO, ExpressLoanItemType } from "@/types/expressLoan";
 import { getAssetClassification } from "@/lib/utils/assetClassification";
+import { getAssetLocation } from "@/lib/utils/assetLocation";
 
 interface ExpressLoanFormValues {
   borrower_name: string;
@@ -40,7 +41,7 @@ const buildAssetSnapshot = (asset: Activo) => ({
   marca: asset.marca,
   modelo: asset.modelo,
   serial: asset.serial,
-  ubicacion: asset.ubicacion,
+  ubicacion: getAssetLocation(asset.ubicacion).locationName,
   dependencia: asset.dependencia,
   custodioNombre: asset.custodioNombre,
 });
@@ -137,6 +138,7 @@ export default function NewExpressLoanPage() {
   }, [activos, deferredAssetSearch]);
 
   const selectedAsset = selectedAssetId ? assetsById.get(selectedAssetId) || null : null;
+  const selectedAssetLocation = selectedAsset ? getAssetLocation(selectedAsset.ubicacion).locationName : "";
 
   const onSubmit = async (values: ExpressLoanFormValues) => {
     try {
@@ -352,7 +354,7 @@ export default function NewExpressLoanPage() {
                           <Badge variant="info">{selectedAsset.codigo}</Badge>
                         </div>
                         <p className="mt-1 text-sm text-slate-500">
-                          {getAssetClassification(selectedAsset.codigo, selectedAsset.categoria).classificationName} - {selectedAsset.ubicacion} - {selectedAsset.dependencia}
+                          {getAssetClassification(selectedAsset.codigo, selectedAsset.categoria).classificationName} - {selectedAssetLocation} - {selectedAsset.dependencia}
                         </p>
                       </div>
                       <Badge variant="outline">Custodio: {selectedAsset.custodioNombre}</Badge>

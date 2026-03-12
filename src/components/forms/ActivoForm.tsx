@@ -17,6 +17,7 @@ import { Activo, EstadoActivoFisico } from '@/types/activo';
 import { Usuario } from '@/types/usuario';
 import { LucideX } from 'lucide-react';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { getAssetLocation, LOCATION_OPTIONS } from '@/lib/utils/assetLocation';
 
 const activoSchema = z.object({
     codigo: z.string().min(1, 'El codigo es requerido'),
@@ -86,6 +87,22 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
     const [error, setError] = useState<string | null>(null);
     const isEditing = !!activo;
 
+    const currentLocation = useMemo(
+        () => getAssetLocation(activo?.ubicacion),
+        [activo?.ubicacion]
+    );
+
+    const locationOptions = useMemo(() => {
+        const options = [...LOCATION_OPTIONS];
+        if (isEditing && currentLocation.locationName && !options.some(option => option.value === currentLocation.locationName)) {
+            options.unshift({
+                value: currentLocation.locationName,
+                label: `${currentLocation.locationName} (Actual)`,
+            });
+        }
+        return options;
+    }, [currentLocation.locationName, isEditing]);
+
     const { register, handleSubmit, setValue, watch, formState: { errors } } = useForm<ActivoFormData>({
         resolver: zodResolver(activoSchema),
         defaultValues: activo ? {
@@ -95,7 +112,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
             marca: activo.marca || '',
             modelo: activo.modelo || '',
             serial: activo.serial || '',
-            ubicacion: activo.ubicacion,
+            ubicacion: currentLocation.locationName,
             dependencia: activo.dependencia,
             custodioId: activo.custodioId,
             estado: activo.estado,
@@ -105,6 +122,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
         } : {
             estado: 'activo',
             categoria: '',
+            ubicacion: '',
             dependencia: '',
         },
     });
@@ -181,7 +199,7 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                 marca: data.marca || undefined,
                 modelo: data.modelo || undefined,
                 serial: data.serial || undefined,
-                ubicacion: data.ubicacion,
+                ubicacion: getAssetLocation(data.ubicacion).locationName,
                 dependencia: data.dependencia,
                 custodioId: data.custodioId || '',
                 custodioNombre: custodioSeleccionado?.nombre || 'Sin asignar',
@@ -288,8 +306,18 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <div>
-                        <Label htmlFor="ubicacion">Ubicacion *</Label>
-                        <Input id="ubicacion" {...register('ubicacion')} placeholder="Ej: Oficina 201, Piso 2" />
+                        <Label htmlFor="ubicacion">Sitio *</Label>
+                        <Select id="ubicacion" {...register('ubicacion')}>
+                            <option value="">Seleccione un sitio</option>
+                            {locationOptions.map(option => (
+                                <option key={option.value} value={option.value}>{option.label}</option>
+                            ))}
+                        </Select>
+                        {isEditing && !currentLocation.isMapped && currentLocation.locationName !== 'Sin asignar' && (
+                            <p className="mt-1 text-xs text-amber-600">
+                                La ubicacion actual no pertenece al catalogo oficial. Puedes conservarla o reemplazarla por un sitio del listado.
+                            </p>
+                        )}
                         {errors.ubicacion && <p className="text-red-500 text-sm mt-1">{errors.ubicacion.message}</p>}
                     </div>
 

@@ -14,6 +14,7 @@ import { SignaturePad } from '@/components/signature/SignaturePad';
 import { Activo } from '@/types/activo';
 import { useAuth } from '@/hooks/useAuth';
 import { crearRevision, subirEvidencia, firmarComoRevisor } from '@/services/revisionService';
+import { getAssetLocation } from '@/lib/utils/assetLocation';
 
 const revisionSchema = z.object({
     fecha: z.string().min(1, 'La fecha es requerida'),
@@ -41,6 +42,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
     const [revisionId, setRevisionId] = useState<string | null>(null);
     const [evidencias, setEvidencias] = useState<File[]>([]);
     const [loading, setLoading] = useState(false);
+    const assetLocation = getAssetLocation(activo.ubicacion);
 
     const { register, handleSubmit, getValues, formState: { errors } } = useForm<RevisionFormData>({
         resolver: zodResolver(revisionSchema),
@@ -60,7 +62,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
                 activoId: activo.id,
                 codigoActivo: activo.codigo,
                 descripcionActivo: activo.descripcion,
-                ubicacionActivo: activo.ubicacion,
+                ubicacionActivo: assetLocation.locationName,
 
                 custodioId: custodio.id,
                 custodioNombre: custodio.nombre,
@@ -167,7 +169,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
                         <h3 className="font-semibold mb-2">Activo a revisar</h3>
                         <p><strong>Código:</strong> {activo.codigo}</p>
                         <p><strong>Descripción:</strong> {activo.descripcion}</p>
-                        <p><strong>Ubicación:</strong> {activo.ubicacion}</p>
+                        <p><strong>Ubicacion:</strong> {assetLocation.locationName}</p>
                         <p><strong>Custodio:</strong> {custodio.nombre}</p>
                     </div>
 
