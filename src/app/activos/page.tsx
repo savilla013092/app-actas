@@ -2,10 +2,11 @@
 
 import { useDeferredValue, useEffect, useMemo, useState } from 'react';
 import Link from 'next/link';
+import { useRouter } from 'next/navigation';
 import {
+    LucideAlertTriangle,
     LucideBox,
     LucideDownload,
-    LucideEye,
     LucideHome,
     LucideMapPin,
     LucidePlus,
@@ -17,14 +18,14 @@ import { ActivoForm } from '@/components/forms/ActivoForm';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
-import { SkeletonCard } from '@/components/ui/skeleton';
+import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
 import { exportToExcel, activosExportColumns } from '@/lib/utils/export';
 import { obtenerActivosPaginados } from '@/services/activoService';
 import { Activo } from '@/types/activo';
 
-const PAGE_SIZE = 24;
+const PAGE_SIZE = 50;
 
 type ClassifiedActivo = Activo & {
     classificationCode?: string;
@@ -53,14 +54,14 @@ const getEstadoVariant = (estado: Activo['estado']) => {
 };
 
 export default function ActivosPage() {
-    const { user, isCustodio } = useAuth();
-    const isCustodioRole = isCustodio();
+    const router = useRouter();
+    const { user, loading: authLoading } = useAuth();
     const [activos, setActivos] = useState<Activo[]>([]);
     const [loading, setLoading] = useState(true);
     const [loadingMore, setLoadingMore] = useState(false);
     const [loadingAll, setLoadingAll] = useState(false);
     const [search, setSearch] = useState('');
-    const [showForm, setShowForm] = useState(false);
+    const [showEditForm, setShowEditForm] = useState(false);
     const [editingActivo, setEditingActivo] = useState<Activo | null>(null);
     const [filterValues, setFilterValues] = useState<Record<string, string>>({});
     const [isExporting, setIsExporting] = useState(false);
@@ -69,11 +70,22 @@ export default function ActivosPage() {
     const [hasMore, setHasMore] = useState(false);
     const deferredSearch = useDeferredValue(search);
 
+    const userRole = user?.usuario?.rol;
+    const isCustodioRole = userRole === 'custodio';
+    const canManageActivos = userRole === 'admin' || userRole === 'logistica';
+    const profileUnavailable = Boolean(user && !user.usuario);
+
+    useEffect(() => {
+        if (!authLoading && !user) {
+            router.push('/auth/login');
+        }
+    }, [authLoading, user, router]);
+
     useEffect(() => {
         let active = true;
 
         async function loadInitialPage() {
-            if (!user) {
+            if (authLoading || !user) {
                 return;
             }
 
@@ -113,7 +125,7 @@ export default function ActivosPage() {
         return () => {
             active = false;
         };
-    }, [user, isCustodioRole]);
+    }, [authLoading, user, isCustodioRole]);
 
     const handleReloadFirstPage = async () => {
         if (!user) {
@@ -202,15 +214,15 @@ export default function ActivosPage() {
         }
     };
 
-    const handleFormSuccess = async () => {
-        setShowForm(false);
+    const handleFormSuccess = async (_activoId: string) => {
+        setShowEditForm(false);
         setEditingActivo(null);
         await handleReloadFirstPage();
     };
 
     const handleEditActivo = (activo: Activo) => {
         setEditingActivo(activo);
-        setShowForm(true);
+        setShowEditForm(true);
     };
 
     const handleFilterChange = (key: string, value: string) => {
@@ -243,7 +255,9 @@ export default function ActivosPage() {
 
     const uniqueUbicaciones = useMemo(() => {
         const ubicaciones = Array.from(new Set(classifiedActivos.map(activo => activo.ubicacion).filter(Boolean)));
-        return ubicaciones.sort((a, b) => a.localeCompare(b)).map(ubicacion => ({ label: ubicacion, value: ubicacion }));
+        return ubicaciones
+            .sort((a, b) => a.localeCompare(b))
+            .map(ubicacion => ({ label: ubicacion, value: ubicacion }));
     }, [classifiedActivos]);
 
     const uniqueEstados = useMemo(() => [
@@ -281,7 +295,8 @@ export default function ActivosPage() {
             const matchesSearch = !normalizedSearch ||
                 activo.codigo.toLowerCase().includes(normalizedSearch) ||
                 activo.descripcion.toLowerCase().includes(normalizedSearch) ||
-                activo.custodioNombre.toLowerCase().includes(normalizedSearch);
+                activo.custodioNombre.toLowerCase().includes(normalizedSearch) ||
+                (activo.serial || '').toLowerCase().includes(normalizedSearch);
 
             const matchesCategoria = !filterValues.categoria || activo.classificationName === filterValues.categoria;
             const matchesUbicacion = !filterValues.ubicacion || activo.ubicacion === filterValues.ubicacion;
@@ -290,23 +305,6 @@ export default function ActivosPage() {
             return matchesSearch && matchesCategoria && matchesUbicacion && matchesEstado;
         });
     }, [classifiedActivos, deferredSearch, filterValues]);
-
-    const groupedActivos = useMemo(() => {
-        const groups = new Map<string, ClassifiedActivo[]>();
-
-        filteredActivos.forEach(activo => {
-            const currentItems = groups.get(activo.classificationName) || [];
-            currentItems.push(activo);
-            groups.set(activo.classificationName, currentItems);
-        });
-
-        return Array.from(groups.entries())
-            .map(([classificationName, items]) => ({
-                classificationName,
-                items: [...items].sort((a, b) => a.codigo.localeCompare(b.codigo)),
-            }))
-            .sort((a, b) => a.classificationName.localeCompare(b.classificationName));
-    }, [filteredActivos]);
 
     const loadedCount = activos.length;
     const allLoaded = totalCount === 0 || loadedCount >= totalCount;
@@ -333,7 +331,7 @@ export default function ActivosPage() {
         },
     ];
 
-    if (!isCustodioRole) {
+    if (canManageActivos) {
         headerActions.push(
             {
                 label: 'Exportar',
@@ -344,12 +342,25 @@ export default function ActivosPage() {
             },
             {
                 label: 'Nuevo activo',
-                onClick: () => {
-                    setEditingActivo(null);
-                    setShowForm(true);
-                },
+                href: '/activos/nuevo',
                 icon: <LucidePlus size={16} />,
             }
+        );
+    } else if (!isCustodioRole && !profileUnavailable) {
+        headerActions.push({
+            label: 'Exportar',
+            onClick: handleExport,
+            icon: <LucideDownload size={16} />,
+            variant: 'outline',
+            loading: isExporting,
+        });
+    }
+
+    if (authLoading || !user) {
+        return (
+            <div className='flex min-h-[50vh] items-center justify-center'>
+                <SkeletonList items={4} />
+            </div>
         );
     }
 
@@ -362,8 +373,21 @@ export default function ActivosPage() {
                     breadcrumbItems={[{ label: 'Activos' }]}
                     actions={headerActions}
                 />
-                <div className='grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3'>
-                    {[1, 2, 3, 4, 5, 6].map(i => <SkeletonCard key={i} />)}
+                {profileUnavailable && (
+                    <Card className='border-amber-200 bg-amber-50 p-4 text-amber-900'>
+                        <div className='flex items-start gap-3'>
+                            <LucideAlertTriangle className='mt-0.5 shrink-0' size={18} />
+                            <p className='text-sm'>
+                                Tu perfil no esta disponible. Puedes consultar el inventario, pero no crear ni editar activos hasta volver a iniciar sesion.
+                            </p>
+                        </div>
+                    </Card>
+                )}
+                <div className='hidden lg:block'>
+                    <SkeletonTable rows={8} />
+                </div>
+                <div className='lg:hidden'>
+                    <SkeletonList items={6} />
                 </div>
             </div>
         );
@@ -377,6 +401,17 @@ export default function ActivosPage() {
                 breadcrumbItems={[{ label: 'Activos' }]}
                 actions={headerActions}
             />
+
+            {profileUnavailable && (
+                <Card className='border-amber-200 bg-amber-50 p-4 text-amber-900'>
+                    <div className='flex items-start gap-3'>
+                        <LucideAlertTriangle className='mt-0.5 shrink-0' size={18} />
+                        <p className='text-sm'>
+                            Tu perfil no esta disponible. Puedes consultar el inventario, pero no crear ni editar activos hasta volver a iniciar sesion.
+                        </p>
+                    </div>
+                </Card>
+            )}
 
             <Card className='border-border/50 p-4'>
                 <div className='flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between'>
@@ -419,7 +454,7 @@ export default function ActivosPage() {
                 values={filterValues}
                 onChange={handleFilterChange}
                 onClear={handleClearFilters}
-                searchPlaceholder='Buscar por codigo, descripcion o custodio...'
+                searchPlaceholder='Buscar por codigo, descripcion, custodio o serial...'
                 searchValue={search}
                 onSearchChange={setSearch}
             />
@@ -430,87 +465,148 @@ export default function ActivosPage() {
                 </Badge>
             )}
 
-            {groupedActivos.length > 0 ? (
-                <div className='space-y-8'>
-                    {groupedActivos.map(group => (
-                        <section key={group.classificationName} className='space-y-4'>
-                            <div className='flex items-center justify-between gap-3 border-b border-border/60 pb-3'>
-                                <div>
-                                    <h3 className='text-lg font-semibold text-foreground'>
-                                        {group.classificationName}
-                                    </h3>
-                                    <p className='text-sm text-muted-foreground'>
-                                        {group.items.length} activo{group.items.length === 1 ? '' : 's'}
+            {filteredActivos.length > 0 ? (
+                <>
+                    <div className='hidden lg:block'>
+                        <Card className='overflow-hidden border-border/50'>
+                            <div className='overflow-x-auto'>
+                                <table className='min-w-full text-sm'>
+                                    <thead className='bg-muted/50 text-left text-xs uppercase tracking-wider text-muted-foreground'>
+                                        <tr>
+                                            <th className='px-4 py-3 font-semibold'>Codigo</th>
+                                            <th className='px-4 py-3 font-semibold'>Descripcion</th>
+                                            <th className='px-4 py-3 font-semibold'>Serial</th>
+                                            <th className='px-4 py-3 font-semibold'>Custodio</th>
+                                            <th className='px-4 py-3 font-semibold'>Clasificacion</th>
+                                            <th className='px-4 py-3 font-semibold'>Ubicacion</th>
+                                            <th className='px-4 py-3 font-semibold'>Estado</th>
+                                            <th className='px-4 py-3 font-semibold'>Acciones</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className='divide-y divide-border/60'>
+                                        {filteredActivos.map(activo => (
+                                            <tr key={activo.id} className='hover:bg-muted/30'>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <Link href={`/activos/${activo.id}`} className='font-mono text-xs font-semibold text-foreground hover:text-primary'>
+                                                        {activo.codigo}
+                                                    </Link>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className='min-w-[280px]'>
+                                                        <p className='font-medium text-foreground'>{activo.descripcion}</p>
+                                                        {(activo.marca || activo.modelo) && (
+                                                            <p className='mt-1 text-xs text-muted-foreground'>
+                                                                {[activo.marca, activo.modelo].filter(Boolean).join(' - ')}
+                                                            </p>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <span className='font-mono text-xs text-foreground'>{activo.serial || 'S/N'}</span>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <span className='text-sm text-foreground'>{activo.custodioNombre || 'Sin asignar'}</span>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <Badge variant='outline' size='sm'>
+                                                        {activo.classificationName}
+                                                    </Badge>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className='flex items-start gap-2 text-sm text-foreground'>
+                                                        <LucideMapPin size={14} className='mt-0.5 shrink-0 text-muted-foreground' />
+                                                        <span className='max-w-[220px] truncate'>{activo.ubicacion}</span>
+                                                    </div>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <Badge variant={getEstadoVariant(activo.estado)} size='sm'>
+                                                        {activo.estado}
+                                                    </Badge>
+                                                </td>
+                                                <td className='px-4 py-3 align-top'>
+                                                    <div className='flex flex-wrap gap-2'>
+                                                        <Button asChild variant='ghost' size='sm'>
+                                                            <Link href={`/activos/${activo.id}`}>Ver</Link>
+                                                        </Button>
+                                                        {canManageActivos && (
+                                                            <>
+                                                                <Button asChild variant='ghost' size='sm'>
+                                                                    <Link href={`/revision/nueva/${activo.id}`}>Revisar</Link>
+                                                                </Button>
+                                                                <Button
+                                                                    type='button'
+                                                                    variant='ghost'
+                                                                    size='sm'
+                                                                    onClick={() => handleEditActivo(activo)}
+                                                                >
+                                                                    Editar
+                                                                </Button>
+                                                            </>
+                                                        )}
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </Card>
+                    </div>
+
+                    <div className='space-y-3 lg:hidden'>
+                        {filteredActivos.map(activo => (
+                            <Card key={activo.id} className='border-border/50 p-4'>
+                                <div className='flex items-start justify-between gap-3'>
+                                    <div className='min-w-0 flex-1'>
+                                        <Link href={`/activos/${activo.id}`} className='font-mono text-xs font-semibold text-foreground hover:text-primary'>
+                                            {activo.codigo}
+                                        </Link>
+                                        <p className='mt-1 text-sm font-medium text-foreground'>{activo.descripcion}</p>
+                                    </div>
+                                    <Badge variant={getEstadoVariant(activo.estado)} size='sm'>
+                                        {activo.estado}
+                                    </Badge>
+                                </div>
+
+                                <div className='mt-3 space-y-2 text-xs'>
+                                    <p className='text-foreground'>
+                                        <span className='font-semibold text-muted-foreground'>Serial:</span> {activo.serial || 'S/N'}
+                                    </p>
+                                    <p className='text-foreground'>
+                                        <span className='font-semibold text-muted-foreground'>Custodio:</span> {activo.custodioNombre || 'Sin asignar'}
+                                    </p>
+                                    <p className='text-foreground'>
+                                        <span className='font-semibold text-muted-foreground'>Clasificacion:</span> {activo.classificationName}
+                                    </p>
+                                    <p className='text-foreground'>
+                                        <span className='font-semibold text-muted-foreground'>Ubicacion:</span> {activo.ubicacion}
                                     </p>
                                 </div>
-                                <Badge variant='outline'>{group.items.length}</Badge>
-                            </div>
 
-                            <div className='grid grid-cols-1 gap-6 md:grid-cols-2 xl:grid-cols-3'>
-                                {group.items.map(activo => (
-                                    <Card key={activo.id} className='border-border/50 p-6 hover-lift'>
-                                        <div className='mb-4 flex items-start justify-between gap-3'>
-                                            <Badge variant='default' size='sm'>
-                                                {activo.classificationName}
-                                            </Badge>
-                                            <Badge variant={getEstadoVariant(activo.estado)} size='sm'>
-                                                {activo.estado}
-                                            </Badge>
-                                        </div>
-
-                                        <h3 className='mb-1 line-clamp-2 font-bold text-foreground'>
-                                            {activo.descripcion}
-                                        </h3>
-                                        <p className='mb-4 text-sm font-mono text-muted-foreground'>
-                                            {activo.codigo}
-                                        </p>
-
-                                        <div className='mb-6 space-y-2'>
-                                            <div className='flex items-center gap-2 text-xs'>
-                                                <LucideMapPin size={14} className='shrink-0 text-muted-foreground' />
-                                                <span className='truncate font-medium text-foreground'>{activo.ubicacion}</span>
-                                            </div>
-                                            <div className='flex items-center gap-2 text-xs'>
-                                                <div className='flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full bg-primary/20'>
-                                                    <span className='text-[8px] font-bold text-primary'>
-                                                        {activo.custodioNombre?.charAt(0)?.toUpperCase() || '?'}
-                                                    </span>
-                                                </div>
-                                                <span className='truncate font-medium text-foreground'>{activo.custodioNombre}</span>
-                                            </div>
-                                        </div>
-
-                                        <div className='flex gap-2'>
-                                            <Button asChild variant='outline' className='w-full' size='sm'>
-                                                <Link href={`/activos/${activo.id}`}>
-                                                    <LucideEye size={16} className='mr-1' />
-                                                    Ver
-                                                </Link>
+                                <div className='mt-4 flex flex-wrap gap-2'>
+                                    <Button asChild variant='outline' size='sm'>
+                                        <Link href={`/activos/${activo.id}`}>Ver</Link>
+                                    </Button>
+                                    {canManageActivos && (
+                                        <>
+                                            <Button asChild variant='outline' size='sm'>
+                                                <Link href={`/revision/nueva/${activo.id}`}>Revisar</Link>
                                             </Button>
-                                            {!isCustodioRole && (
-                                                <Button asChild className='w-full' size='sm'>
-                                                    <Link href={`/revision/nueva/${activo.id}`}>Revisar</Link>
-                                                </Button>
-                                            )}
-                                        </div>
-
-                                        {!isCustodioRole && (
                                             <Button
                                                 type='button'
                                                 variant='ghost'
-                                                className='mt-2 w-full text-xs text-muted-foreground hover:text-foreground'
                                                 size='sm'
                                                 onClick={() => handleEditActivo(activo)}
                                             >
-                                                Editar informacion
+                                                Editar
                                             </Button>
-                                        )}
-                                    </Card>
-                                ))}
-                            </div>
-                        </section>
-                    ))}
-                </div>
+                                        </>
+                                    )}
+                                </div>
+                            </Card>
+                        ))}
+                    </div>
+                </>
             ) : (
                 <div className='rounded-xl border border-dashed border-border bg-card py-16 text-center'>
                     <LucideBox className='mx-auto mb-4 text-muted-foreground' size={48} />
@@ -523,14 +619,14 @@ export default function ActivosPage() {
                 </div>
             )}
 
-            {showForm && (
+            {showEditForm && editingActivo && (
                 <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm'>
                     <div className='w-full max-w-2xl animate-scale-in'>
                         <ActivoForm
                             activo={editingActivo}
-                            onSuccess={() => void handleFormSuccess()}
+                            onSuccess={(activoId) => void handleFormSuccess(activoId)}
                             onCancel={() => {
-                                setShowForm(false);
+                                setShowEditForm(false);
                                 setEditingActivo(null);
                             }}
                         />

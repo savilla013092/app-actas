@@ -38,7 +38,7 @@ type ActivoFormData = z.infer<typeof activoSchema>;
 
 interface ActivoFormProps {
     activo?: Activo | null;
-    onSuccess: () => void;
+    onSuccess: (activoId: string) => void;
     onCancel: () => void;
 }
 
@@ -194,11 +194,11 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
             if (isEditing && activo) {
                 await actualizarActivo(activo.id, activoData);
+                onSuccess(activo.id);
             } else {
-                await crearActivo(activoData);
+                const activoId = await crearActivo(activoData);
+                onSuccess(activoId);
             }
-
-            onSuccess();
         } catch (err: unknown) {
             console.error('Error al guardar activo:', err);
             let errorMessage = 'Error desconocido';
