@@ -46,6 +46,15 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "codigo", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "search.codigo", "order": "ASCENDING" }
       ]
     },
@@ -55,6 +64,45 @@
       "fields": [
         { "fieldPath": "estado", "order": "ASCENDING" },
         { "fieldPath": "search.serial", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "search.tokens", "arrayConfig": "CONTAINS" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "search.classificationCode", "order": "ASCENDING" },
+        { "fieldPath": "codigo", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "search.locationName", "order": "ASCENDING" },
+        { "fieldPath": "codigo", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "activos",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "estado", "order": "ASCENDING" },
+        { "fieldPath": "search.classificationCode", "order": "ASCENDING" },
+        { "fieldPath": "search.locationName", "order": "ASCENDING" },
+        { "fieldPath": "codigo", "order": "ASCENDING" },
+        { "fieldPath": "__name__", "order": "ASCENDING" }
       ]
     },
     {

@@ -38,6 +38,16 @@ function initializeFirebaseAdmin() {
 initializeFirebaseAdmin();
 const db = admin.firestore();
 
+function normalizeText(value) {
+    return String(value || '')
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .replace(/_/g, ' ')
+        .replace(/\s+/g, ' ')
+        .toLowerCase()
+        .trim();
+}
+
 function normalizarCodigoClasificacion(value) {
     if (value === undefined || value === null) {
         return undefined;
@@ -64,42 +74,9 @@ function obtenerCategoria(codigoActivo, categoriaFallback) {
     return 'Sin clasificacion';
 }
 
-function normalizeLocationText(value) {
-    return String(value)
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
-        .replace(/_/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim()
-        .toLowerCase();
-}
-
-function normalizeLocationCode(value) {
-    if (value === undefined || value === null) {
-        return undefined;
-    }
-
-    const raw = String(value).trim();
-    if (!raw) {
-        return undefined;
-    }
-
-    if (/^\d+$/.test(raw)) {
-        return String(Number(raw));
-    }
-
-    const normalizedText = normalizeLocationText(raw);
-    const legacyMatch = normalizedText.match(/^ubicacion\s+(\d+)$/);
-    if (legacyMatch) {
-        return String(Number(legacyMatch[1]));
-    }
-
-    return undefined;
-}
-
 const normalizedNameToLocation = new Map();
 for (const [code, name] of Object.entries(locationCatalog)) {
-    const normalizedName = normalizeLocationText(name);
+    const normalizedName = normalizeText(name);
     if (!normalizedNameToLocation.has(normalizedName)) {
         normalizedNameToLocation.set(normalizedName, { code, name });
     }
@@ -115,18 +92,18 @@ function obtenerUbicacion(value) {
         return UNKNOWN_LOCATION;
     }
 
-    const normalizedText = normalizeLocationText(raw);
-    if (normalizedText === normalizeLocationText(UNKNOWN_LOCATION) || normalizedText === 'ubicacion sin asignar') {
+    if (/^\d+$/.test(raw)) {
+        return locationCatalog[String(Number(raw))] || UNKNOWN_LOCATION;
+    }
+
+    const normalizedText = normalizeText(raw);
+    if (normalizedText === normalizeText(UNKNOWN_LOCATION) || normalizedText === 'ubicacion sin asignar') {
         return UNKNOWN_LOCATION;
     }
 
-    const locationCode = normalizeLocationCode(raw);
-    if (locationCode) {
-        if (locationCatalog[locationCode]) {
-            return locationCatalog[locationCode];
-        }
-
-        return UNKNOWN_LOCATION;
+    const legacyMatch = normalizedText.match(/^ubicacion\s+(\d+)$/);
+    if (legacyMatch) {
+        return locationCatalog[String(Number(legacyMatch[1]))] || UNKNOWN_LOCATION;
     }
 
     const knownLocation = normalizedNameToLocation.get(normalizedText);
@@ -135,6 +112,49 @@ function obtenerUbicacion(value) {
     }
 
     return raw;
+}
+
+function tokenizarBusqueda(parts) {
+    const tokens = new Set();
+
+    for (const part of parts) {
+        if (!part) {
+            continue;
+        }
+
+        const normalized = normalizeText(part).replace(/[^a-z0-9]+/g, ' ');
+        for (const token of normalized.split(/\s+/)) {
+            if (token.length >= 2) {
+                tokens.add(token);
+            }
+        }
+    }
+
+    return Array.from(tokens).slice(0, 40);
+}
+
+function construirIndiceBusqueda(activo) {
+    const categoria = obtenerCategoria(activo.codigo, activo.categoria);
+    const ubicacion = obtenerUbicacion(activo.ubicacion);
+
+    return {
+        codigo: normalizeText(activo.codigo),
+        ...(activo.serial ? { serial: normalizeText(activo.serial) } : {}),
+        ...(normalizarCodigoClasificacion(activo.codigo)
+            ? { classificationCode: normalizarCodigoClasificacion(activo.codigo) }
+            : {}),
+        classificationName: categoria,
+        locationName: ubicacion,
+        tokens: tokenizarBusqueda([
+            activo.codigo,
+            activo.descripcion,
+            activo.serial,
+            activo.marca,
+            activo.modelo,
+            categoria,
+            ubicacion,
+        ]),
+    };
 }
 
 function convertirFechaExcel(fechaExcel) {
@@ -253,16 +273,19 @@ async function importarActivos() {
                 continue;
             }
 
+            const codigo = `AF-${String(fila[COL.CODIGO]).trim()}`;
+            const categoria = obtenerCategoria(codigo);
+            const ubicacion = obtenerUbicacion(fila[COL.UBICACION]);
             const estado = fila[COL.RETIRADO] === true ? 'baja' : 'activo';
 
             const activo = {
-                codigo: `AF-${String(fila[COL.CODIGO])}`,
+                codigo,
                 descripcion: fila[COL.DESCRIPCION] || 'Sin descripcion',
-                categoria: obtenerCategoria(fila[COL.CODIGO]),
+                categoria,
                 marca: fila[COL.MARCA] || undefined,
                 modelo: fila[COL.MODELO] || undefined,
                 serial: fila[COL.SERIAL] || undefined,
-                ubicacion: obtenerUbicacion(fila[COL.UBICACION]),
+                ubicacion,
                 dependencia: 'Direccion Administrativa',
                 custodioId,
                 custodioNombre: 'Custodio General',
@@ -270,6 +293,15 @@ async function importarActivos() {
                 valorAdquisicion: fila[COL.VALOR] || 0,
                 fechaAdquisicion: convertirFechaExcel(fila[COL.FECHA_ADQ]),
                 observaciones: fila[COL.DESC_TECNICA] || undefined,
+                search: construirIndiceBusqueda({
+                    codigo,
+                    descripcion: fila[COL.DESCRIPCION] || 'Sin descripcion',
+                    categoria,
+                    marca: fila[COL.MARCA] || undefined,
+                    modelo: fila[COL.MODELO] || undefined,
+                    serial: fila[COL.SERIAL] || undefined,
+                    ubicacion,
+                }),
                 creadoEn: admin.firestore.FieldValue.serverTimestamp(),
                 actualizadoEn: admin.firestore.FieldValue.serverTimestamp(),
                 creadoPor: 'importacion-excel',

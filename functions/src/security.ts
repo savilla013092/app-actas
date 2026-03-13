@@ -1,7 +1,9 @@
-﻿import { createHash } from 'crypto';
+import { createHash } from 'crypto';
 
 import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
+
+import { normalizeClassificationCode, resolveClassificationName, resolveLocationName } from './assetCatalogs';
 
 export const db = admin.firestore();
 export const storage = admin.storage();
@@ -86,22 +88,37 @@ export function tokenizeSearchParts(parts: Array<string | undefined>): string[] 
     }
   }
 
-  return Array.from(tokenSet).slice(0, 30);
+  return Array.from(tokenSet).slice(0, 40);
 }
 
 export function buildAssetSearchPayload(asset: Record<string, unknown>) {
   const codigo = typeof asset.codigo === 'string' ? asset.codigo : '';
   const serial = typeof asset.serial === 'string' ? asset.serial : '';
+  const classificationCode = normalizeClassificationCode(codigo);
+  const classificationName = resolveClassificationName(
+    codigo,
+    typeof asset.categoria === 'string' ? asset.categoria : undefined
+  );
+  const locationName = resolveLocationName(
+    typeof asset.ubicacion === 'string' || typeof asset.ubicacion === 'number'
+      ? asset.ubicacion
+      : undefined
+  );
 
   return {
     codigo: normalizeText(codigo),
-    serial: serial ? normalizeText(serial) : undefined,
+    ...(serial ? { serial: normalizeText(serial) } : {}),
+    ...(classificationCode ? { classificationCode } : {}),
+    classificationName,
+    locationName,
     tokens: tokenizeSearchParts([
       codigo,
       typeof asset.descripcion === 'string' ? asset.descripcion : undefined,
       serial,
       typeof asset.marca === 'string' ? asset.marca : undefined,
       typeof asset.modelo === 'string' ? asset.modelo : undefined,
+      classificationName,
+      locationName,
     ]),
   };
 }
@@ -133,7 +150,7 @@ export function ensureAuthenticated(
   context: functions.https.CallableContext
 ): CallableAuth {
   if (!context.auth) {
-    throw new functions.https.HttpsError('unauthenticated', 'Debe iniciar sesión para continuar.');
+    throw new functions.https.HttpsError('unauthenticated', 'Debe iniciar sesiÃ³n para continuar.');
   }
   return context.auth;
 }
@@ -146,7 +163,7 @@ export function ensureRole(
   const role = getContextRole(context);
 
   if (!role || !allowedRoles.includes(role) || context.auth?.token.active !== true) {
-    throw new functions.https.HttpsError('permission-denied', 'No tiene permisos para esta operación.');
+    throw new functions.https.HttpsError('permission-denied', 'No tiene permisos para esta operaciÃ³n.');
   }
 
   return authData;
@@ -182,7 +199,7 @@ export async function writeAuditLog(payload: AuditLogPayload): Promise<void> {
 
 export function ensureStoragePath(storagePath: string, expectedPrefix: string): void {
   if (!storagePath.startsWith(expectedPrefix)) {
-    throw new functions.https.HttpsError('invalid-argument', 'La ruta del archivo no es válida.');
+    throw new functions.https.HttpsError('invalid-argument', 'La ruta del archivo no es vÃ¡lida.');
   }
 }
 
@@ -208,7 +225,7 @@ export function buildDocumentHash(data: unknown): string {
 export function toIsoDateString(value?: string): string {
   const date = value ? new Date(value) : new Date();
   if (Number.isNaN(date.getTime())) {
-    throw new functions.https.HttpsError('invalid-argument', 'La fecha suministrada no es válida.');
+    throw new functions.https.HttpsError('invalid-argument', 'La fecha suministrada no es vÃ¡lida.');
   }
 
   return date.toISOString();
@@ -239,11 +256,9 @@ export function parseExcelDate(value: unknown): Date | null {
 }
 
 export function normalizeLocation(value: unknown): string {
-  if (value === undefined || value === null) {
-    return UNKNOWN_LOCATION;
-  }
-
-  const raw = String(value).trim();
-  return raw || UNKNOWN_LOCATION;
+  return resolveLocationName(
+    value === undefined || value === null ? undefined : (value as string | number)
+  );
 }
+
 

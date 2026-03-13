@@ -1,6 +1,8 @@
-﻿import * as functions from 'firebase-functions';
+import * as admin from 'firebase-admin';
+import * as functions from 'firebase-functions';
 import * as XLSX from 'xlsx';
 
+import { normalizeClassificationCode, resolveClassificationName, resolveLocationName } from './assetCatalogs';
 import {
   ExpressLoanAssetSnapshot,
   REGION,
@@ -36,69 +38,243 @@ interface CreateExpressLoanPayload {
   evidences?: UploadedFilePayload[];
 }
 
-export const searchActiveAssets = functions.region(REGION).https.onCall(async (data, context) => {
-  ensureRole(context, ['admin', 'logistica']);
-  const payload = data as { search?: string; limit?: number };
-  const rawSearch = payload.search?.trim() || '';
-  const normalizedSearch = normalizeText(rawSearch);
-  const maxResults = Math.min(Math.max(payload.limit ?? 25, 5), 50);
-  const results = new Map<string, Record<string, unknown>>();
+interface SearchActiveAssetsCursor {
+  codigo: string;
+  id: string;
+}
 
-  const baseCollection = db.collection('activos');
+interface SearchActiveAssetsPayload {
+  search?: string;
+  classificationCode?: string;
+  locationName?: string;
+  limit?: number;
+  cursor?: SearchActiveAssetsCursor | null;
+}
 
-  const collectSnapshot = (snapshot: FirebaseFirestore.QuerySnapshot) => {
-    snapshot.docs.forEach((docSnapshot) => {
-      const data = docSnapshot.data() as Record<string, unknown>;
-      if (data.estado !== 'activo') {
-        return;
-      }
-      results.set(docSnapshot.id, { id: docSnapshot.id, ...data });
-    });
-  };
+const MAX_ASSET_SEARCH_LIMIT = 50;
+const SEARCH_CANDIDATE_LIMIT = 350;
 
-  if (!normalizedSearch) {
-    const snapshot = await baseCollection
-      .where('estado', '==', 'activo')
-      .orderBy('search.codigo')
-      .limit(maxResults)
-      .get();
-    collectSnapshot(snapshot);
-  } else {
-    const queries: Promise<FirebaseFirestore.QuerySnapshot>[] = [
-      baseCollection
-        .where('estado', '==', 'activo')
-        .orderBy('search.codigo')
-        .startAt(normalizedSearch)
-        .endAt(`${normalizedSearch}\uf8ff`)
-        .limit(maxResults)
-        .get(),
-      baseCollection
-        .where('estado', '==', 'activo')
-        .orderBy('search.serial')
-        .startAt(normalizedSearch)
-        .endAt(`${normalizedSearch}\uf8ff`)
-        .limit(maxResults)
-        .get(),
-    ];
-
-    const tokens = tokenizeSearchParts([rawSearch]);
-    if (tokens.length > 0) {
-      queries.push(
-        baseCollection
-          .where('search.tokens', 'array-contains-any', tokens.slice(0, 10))
-          .limit(maxResults)
-          .get()
-      );
-    }
-
-    const snapshots = await Promise.all(queries);
-    snapshots.forEach(collectSnapshot);
+const compareAssets = (left: Record<string, unknown>, right: SearchActiveAssetsCursor) => {
+  const codeCompare = String(left.codigo || '').localeCompare(String(right.codigo || ''));
+  if (codeCompare !== 0) {
+    return codeCompare;
   }
 
+  return String(left.id || '').localeCompare(String(right.id || ''));
+};
+
+const buildSearchFields = (asset: Record<string, unknown>) => {
+  const classificationName =
+    typeof asset.search === 'object' && asset.search !== null && typeof (asset.search as { classificationName?: unknown }).classificationName === 'string'
+      ? String((asset.search as { classificationName: string }).classificationName)
+      : resolveClassificationName(
+          typeof asset.codigo === 'string' ? asset.codigo : undefined,
+          typeof asset.categoria === 'string' ? asset.categoria : undefined
+        );
+
+  const locationName =
+    typeof asset.search === 'object' && asset.search !== null && typeof (asset.search as { locationName?: unknown }).locationName === 'string'
+      ? String((asset.search as { locationName: string }).locationName)
+      : resolveLocationName(
+          typeof asset.ubicacion === 'string' || typeof asset.ubicacion === 'number'
+            ? asset.ubicacion
+            : undefined
+        );
+
+  return [
+    typeof asset.codigo === 'string' ? asset.codigo : '',
+    typeof asset.descripcion === 'string' ? asset.descripcion : '',
+    typeof asset.serial === 'string' ? asset.serial : '',
+    typeof asset.marca === 'string' ? asset.marca : '',
+    typeof asset.modelo === 'string' ? asset.modelo : '',
+    classificationName,
+    locationName,
+    typeof asset.custodioNombre === 'string' ? asset.custodioNombre : '',
+  ];
+};
+
+const matchesAssetFilters = (
+  asset: Record<string, unknown>,
+  classificationCode?: string,
+  locationName?: string
+) => {
+  const resolvedClassificationCode =
+    typeof asset.search === 'object' && asset.search !== null && typeof (asset.search as { classificationCode?: unknown }).classificationCode === 'string'
+      ? String((asset.search as { classificationCode: string }).classificationCode)
+      : normalizeClassificationCode(typeof asset.codigo === 'string' ? asset.codigo : undefined);
+
+  const resolvedLocationName =
+    typeof asset.search === 'object' && asset.search !== null && typeof (asset.search as { locationName?: unknown }).locationName === 'string'
+      ? String((asset.search as { locationName: string }).locationName)
+      : resolveLocationName(
+          typeof asset.ubicacion === 'string' || typeof asset.ubicacion === 'number'
+            ? asset.ubicacion
+            : undefined
+        );
+
+  if (classificationCode && resolvedClassificationCode !== classificationCode) {
+    return false;
+  }
+
+  if (locationName && resolvedLocationName !== locationName) {
+    return false;
+  }
+
+  return asset.estado === 'activo';
+};
+
+const matchesAssetSearch = (
+  asset: Record<string, unknown>,
+  normalizedSearch: string,
+  queryTokens: string[]
+) => {
+  if (!normalizedSearch) {
+    return true;
+  }
+
+  const searchableFields = buildSearchFields(asset)
+    .map((value) => normalizeText(value))
+    .filter(Boolean);
+
+  if (searchableFields.some((value) => value.includes(normalizedSearch))) {
+    return true;
+  }
+
+  const storedTokens = Array.isArray((asset.search as { tokens?: unknown[] } | undefined)?.tokens)
+    ? ((asset.search as { tokens: unknown[] }).tokens
+        .filter((token): token is string => typeof token === 'string')
+        .map((token) => normalizeText(token)))
+    : [];
+  const availableTokens = new Set<string>([...storedTokens, ...tokenizeSearchParts(buildSearchFields(asset))]);
+
+  return queryTokens.every((token) => {
+    if (availableTokens.has(token)) {
+      return true;
+    }
+
+    return searchableFields.some((value) => value.includes(token));
+  });
+};
+
+type AssetDocument = Record<string, unknown> & { id: string; codigo?: string };
+
+const mapAssetDocument = (snapshot: FirebaseFirestore.QueryDocumentSnapshot): AssetDocument => ({
+  id: snapshot.id,
+  ...snapshot.data(),
+});
+
+export const searchActiveAssets = functions.region(REGION).https.onCall(async (data, context) => {
+  ensureRole(context, ['admin', 'logistica']);
+
+  const payload = data as SearchActiveAssetsPayload;
+  const rawSearch = payload.search?.trim() || '';
+  const normalizedSearch = normalizeText(rawSearch);
+  const classificationCode = normalizeClassificationCode(payload.classificationCode);
+  const locationName = payload.locationName ? resolveLocationName(payload.locationName) : undefined;
+  const maxResults = Math.min(Math.max(payload.limit ?? MAX_ASSET_SEARCH_LIMIT, 10), MAX_ASSET_SEARCH_LIMIT);
+  const cursor = payload.cursor || null;
+
+  const activosRef = db.collection('activos');
+
+  if (!normalizedSearch) {
+    let assetQuery: FirebaseFirestore.Query = activosRef.where('estado', '==', 'activo');
+
+    if (classificationCode) {
+      assetQuery = assetQuery.where('search.classificationCode', '==', classificationCode);
+    }
+
+    if (locationName) {
+      assetQuery = assetQuery.where('search.locationName', '==', locationName);
+    }
+
+    assetQuery = assetQuery
+      .orderBy('codigo', 'asc')
+      .orderBy(admin.firestore.FieldPath.documentId(), 'asc');
+
+    if (cursor?.codigo && cursor?.id) {
+      assetQuery = assetQuery.startAfter(cursor.codigo, cursor.id);
+    }
+
+    const snapshot = await assetQuery.limit(maxResults).get();
+    const items = snapshot.docs.map(mapAssetDocument);
+    const lastItem = items.length > 0 ? items[items.length - 1] : null;
+
+    return {
+      items,
+      nextCursor: lastItem ? { codigo: String(lastItem.codigo || ''), id: String(lastItem.id || '') } : null,
+      hasMore: snapshot.size === maxResults,
+    };
+  }
+
+  const queryTokens = tokenizeSearchParts([rawSearch]);
+  const results = new Map<string, Record<string, unknown>>();
+  const searches: Promise<FirebaseFirestore.QuerySnapshot>[] = [
+    activosRef
+      .where('estado', '==', 'activo')
+      .orderBy('search.codigo')
+      .startAt(normalizedSearch)
+      .endAt(`${normalizedSearch}\uf8ff`)
+      .limit(SEARCH_CANDIDATE_LIMIT)
+      .get(),
+    activosRef
+      .where('estado', '==', 'activo')
+      .orderBy('search.serial')
+      .startAt(normalizedSearch)
+      .endAt(`${normalizedSearch}\uf8ff`)
+      .limit(SEARCH_CANDIDATE_LIMIT)
+      .get(),
+  ];
+
+  if (queryTokens.length > 0) {
+    searches.push(
+      activosRef
+        .where('estado', '==', 'activo')
+        .where('search.tokens', 'array-contains-any', queryTokens.slice(0, 10))
+        .limit(SEARCH_CANDIDATE_LIMIT)
+        .get()
+    );
+  }
+
+  const snapshots = await Promise.all(searches);
+  snapshots.forEach((snapshot) => {
+    snapshot.docs.forEach((docSnapshot) => {
+      const asset = mapAssetDocument(docSnapshot);
+      if (!matchesAssetFilters(asset, classificationCode, locationName)) {
+        return;
+      }
+
+      if (!matchesAssetSearch(asset, normalizedSearch, queryTokens)) {
+        return;
+      }
+
+      results.set(docSnapshot.id, asset);
+    });
+  });
+
+  const filteredItems = Array.from(results.values())
+    .sort((left, right) => {
+      const codeCompare = String(left.codigo || '').localeCompare(String(right.codigo || ''));
+      if (codeCompare !== 0) {
+        return codeCompare;
+      }
+
+      return String(left.id || '').localeCompare(String(right.id || ''));
+    })
+    .filter((asset) => {
+      if (!cursor) {
+        return true;
+      }
+
+      return compareAssets(asset, cursor) > 0;
+    });
+
+  const items = filteredItems.slice(0, maxResults);
+  const lastItem = items.length > 0 ? items[items.length - 1] : null;
+
   return {
-    items: Array.from(results.values())
-      .sort((a, b) => String(a.codigo || '').localeCompare(String(b.codigo || '')))
-      .slice(0, maxResults),
+    items,
+    nextCursor: lastItem ? { codigo: String(lastItem.codigo || ''), id: String(lastItem.id || '') } : null,
+    hasMore: filteredItems.length > items.length,
   };
 });
 
@@ -107,11 +283,11 @@ export const createExpressLoan = functions.region(REGION).https.onCall(async (da
   const payload = data as CreateExpressLoanPayload;
 
   if (!payload.borrower_name?.trim() || !payload.item_type || !payload.element_description?.trim()) {
-    throw new functions.https.HttpsError('invalid-argument', 'El préstamo no contiene los campos obligatorios.');
+    throw new functions.https.HttpsError('invalid-argument', 'El prestamo no contiene los campos obligatorios.');
   }
 
   if (payload.item_type === 'comodin' && (!payload.evidences || payload.evidences.length === 0)) {
-    throw new functions.https.HttpsError('invalid-argument', 'El item comodín requiere evidencia fotográfica.');
+    throw new functions.https.HttpsError('invalid-argument', 'El item comodin requiere evidencia fotografica.');
   }
 
   if (payload.item_type === 'activo_registrado' && payload.asset_id) {
@@ -123,7 +299,7 @@ export const createExpressLoan = functions.region(REGION).https.onCall(async (da
       .get();
 
     if (!activeLoanSnapshot.empty) {
-      throw new functions.https.HttpsError('already-exists', 'El activo ya tiene un préstamo express activo.');
+      throw new functions.https.HttpsError('already-exists', 'El activo ya tiene un prestamo express activo.');
     }
   }
 
@@ -159,7 +335,7 @@ export const createExpressLoan = functions.region(REGION).https.onCall(async (da
     documentoId: loanRef.id,
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: `Préstamo express creado para ${payload.borrower_name.trim()}.`,
+    descripcion: `Prestamo express creado para ${payload.borrower_name.trim()}.`,
   });
 
   return { id: loanRef.id };
@@ -170,18 +346,18 @@ export const markExpressLoanReturned = functions.region(REGION).https.onCall(asy
   const payload = data as { loanId?: string };
 
   if (!payload.loanId) {
-    throw new functions.https.HttpsError('invalid-argument', 'Debe indicar el préstamo a devolver.');
+    throw new functions.https.HttpsError('invalid-argument', 'Debe indicar el prestamo a devolver.');
   }
 
   const loanRef = db.collection('express_loans').doc(payload.loanId);
   const snapshot = await loanRef.get();
   if (!snapshot.exists) {
-    throw new functions.https.HttpsError('not-found', 'El préstamo indicado no existe.');
+    throw new functions.https.HttpsError('not-found', 'El prestamo indicado no existe.');
   }
 
   const loan = snapshot.data() as { status?: string };
   if (loan.status !== 'activo') {
-    throw new functions.https.HttpsError('failed-precondition', 'El préstamo ya no está activo.');
+    throw new functions.https.HttpsError('failed-precondition', 'El prestamo ya no esta activo.');
   }
 
   const now = new Date().toISOString();
@@ -198,7 +374,7 @@ export const markExpressLoanReturned = functions.region(REGION).https.onCall(asy
     documentoId: payload.loanId,
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: 'Préstamo express marcado como devuelto.',
+    descripcion: 'Prestamo express marcado como devuelto.',
   });
 
   return { ok: true };
@@ -247,14 +423,16 @@ export const startAssetImport = functions.region(REGION).https.onCall(async (dat
     }
 
     const codigo = `AF-${String(row[COL.CODIGO]).trim()}`;
+    const categoria = resolveClassificationName(codigo, undefined);
+    const ubicacion = normalizeLocation(row[COL.UBICACION]);
     const assetData = stripUndefinedDeep({
       codigo,
       descripcion: String(row[COL.DESCRIPCION] || 'Sin descripcion').trim(),
-      categoria: 'Sin clasificacion',
+      categoria,
       marca: row[COL.MARCA] ? String(row[COL.MARCA]).trim() : undefined,
       modelo: row[COL.MODELO] ? String(row[COL.MODELO]).trim() : undefined,
       serial: row[COL.SERIAL] ? String(row[COL.SERIAL]).trim() : undefined,
-      ubicacion: normalizeLocation(row[COL.UBICACION]),
+      ubicacion,
       dependencia: 'Sin asignar',
       custodioId: '',
       custodioNombre: 'Sin asignar',
@@ -265,9 +443,11 @@ export const startAssetImport = functions.region(REGION).https.onCall(async (dat
       search: buildAssetSearchPayload({
         codigo,
         descripcion: row[COL.DESCRIPCION],
+        categoria,
         serial: row[COL.SERIAL],
         marca: row[COL.MARCA],
         modelo: row[COL.MODELO],
+        ubicacion,
       }),
       creadoEn: serverTimestamp(),
       actualizadoEn: serverTimestamp(),
@@ -298,11 +478,9 @@ export const startAssetImport = functions.region(REGION).https.onCall(async (dat
     modulo: 'activos',
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: `Importación de activos ejecutada con ${imported} registros creados.`,
+    descripcion: `Importacion de activos ejecutada con ${imported} registros creados.`,
     metadata: { imported, skipped },
   });
 
   return { imported, skipped };
 });
-
-

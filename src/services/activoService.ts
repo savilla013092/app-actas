@@ -1,4 +1,4 @@
-﻿import {
+import {
   addDoc,
   collection,
   doc,
@@ -17,8 +17,8 @@
 
 import { db } from '@/lib/firebase/config';
 import { buildAssetSearchIndex } from '@/lib/utils/assetSearch';
-import { Activo } from '@/types/activo';
 import { callCallable } from '@/services/callableService';
+import { Activo } from '@/types/activo';
 
 const COLLECTION = 'activos';
 const DEFAULT_PAGE_SIZE = 50;
@@ -63,8 +63,23 @@ export interface PaginatedActivosResult {
   totalCount: number;
 }
 
+export interface SearchActiveAssetsCursor {
+  codigo: string;
+  id: string;
+}
+
+export interface SearchActiveAssetsOptions {
+  search?: string;
+  classificationCode?: string;
+  locationName?: string;
+  limit?: number;
+  cursor?: SearchActiveAssetsCursor | null;
+}
+
 export interface SearchActiveAssetsResult {
   items: Activo[];
+  nextCursor: SearchActiveAssetsCursor | null;
+  hasMore: boolean;
 }
 
 export async function obtenerActivosPorCustodio(custodioId: string): Promise<Activo[]> {
@@ -107,15 +122,20 @@ export async function obtenerActivosPaginados({
   };
 }
 
-export async function buscarActivosDisponibles(
-  search: string,
-  resultLimit = 25
-): Promise<Activo[]> {
-  const response = await callCallable<{ search: string; limit: number }, SearchActiveAssetsResult>(
-    'searchActiveAssets',
-    { search, limit: resultLimit }
-  );
-  return response.items;
+export async function buscarActivosDisponibles({
+  search = '',
+  classificationCode,
+  locationName,
+  limit: resultLimit = 50,
+  cursor = null,
+}: SearchActiveAssetsOptions = {}): Promise<SearchActiveAssetsResult> {
+  return callCallable<SearchActiveAssetsOptions, SearchActiveAssetsResult>('searchActiveAssets', {
+    search,
+    classificationCode,
+    locationName,
+    limit: resultLimit,
+    cursor,
+  });
 }
 
 export async function obtenerActivo(id: string): Promise<Activo | null> {
@@ -135,6 +155,8 @@ export async function crearActivo(
       serial: data.serial,
       marca: data.marca,
       modelo: data.modelo,
+      categoria: data.categoria,
+      ubicacion: data.ubicacion,
     }),
     creadoEn: serverTimestamp(),
     actualizadoEn: serverTimestamp(),
@@ -146,16 +168,6 @@ export async function crearActivo(
 export async function actualizarActivo(id: string, data: Partial<Activo>): Promise<void> {
   const payload = stripUndefined({
     ...data,
-    search:
-      data.codigo || data.descripcion || data.serial || data.marca || data.modelo
-        ? buildAssetSearchIndex({
-            codigo: String(data.codigo || ''),
-            descripcion: data.descripcion,
-            serial: data.serial,
-            marca: data.marca,
-            modelo: data.modelo,
-          })
-        : undefined,
     actualizadoEn: serverTimestamp(),
   });
   await updateDoc(doc(db, COLLECTION, id), payload);
@@ -170,4 +182,3 @@ export async function contarActivosPorCategoria(categoria: string): Promise<numb
   const snapshot = await getCountFromServer(query(collection(db, COLLECTION), where('categoria', '==', categoria)));
   return snapshot.data().count;
 }
-

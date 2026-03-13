@@ -54,6 +54,7 @@ exports.normalizeLocation = normalizeLocation;
 const crypto_1 = require("crypto");
 const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions"));
+const assetCatalogs_1 = require("./assetCatalogs");
 exports.db = admin.firestore();
 exports.storage = admin.storage();
 exports.serverTimestamp = admin.firestore.FieldValue.serverTimestamp;
@@ -80,20 +81,30 @@ function tokenizeSearchParts(parts) {
             }
         }
     }
-    return Array.from(tokenSet).slice(0, 30);
+    return Array.from(tokenSet).slice(0, 40);
 }
 function buildAssetSearchPayload(asset) {
     const codigo = typeof asset.codigo === 'string' ? asset.codigo : '';
     const serial = typeof asset.serial === 'string' ? asset.serial : '';
+    const classificationCode = (0, assetCatalogs_1.normalizeClassificationCode)(codigo);
+    const classificationName = (0, assetCatalogs_1.resolveClassificationName)(codigo, typeof asset.categoria === 'string' ? asset.categoria : undefined);
+    const locationName = (0, assetCatalogs_1.resolveLocationName)(typeof asset.ubicacion === 'string' || typeof asset.ubicacion === 'number'
+        ? asset.ubicacion
+        : undefined);
     return {
         codigo: normalizeText(codigo),
-        serial: serial ? normalizeText(serial) : undefined,
+        ...(serial ? { serial: normalizeText(serial) } : {}),
+        ...(classificationCode ? { classificationCode } : {}),
+        classificationName,
+        locationName,
         tokens: tokenizeSearchParts([
             codigo,
             typeof asset.descripcion === 'string' ? asset.descripcion : undefined,
             serial,
             typeof asset.marca === 'string' ? asset.marca : undefined,
             typeof asset.modelo === 'string' ? asset.modelo : undefined,
+            classificationName,
+            locationName,
         ]),
     };
 }
@@ -115,7 +126,7 @@ function getContextRole(context) {
 }
 function ensureAuthenticated(context) {
     if (!context.auth) {
-        throw new functions.https.HttpsError('unauthenticated', 'Debe iniciar sesión para continuar.');
+        throw new functions.https.HttpsError('unauthenticated', 'Debe iniciar sesiÃ³n para continuar.');
     }
     return context.auth;
 }
@@ -124,7 +135,7 @@ function ensureRole(context, allowedRoles) {
     const authData = ensureAuthenticated(context);
     const role = getContextRole(context);
     if (!role || !allowedRoles.includes(role) || ((_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.active) !== true) {
-        throw new functions.https.HttpsError('permission-denied', 'No tiene permisos para esta operación.');
+        throw new functions.https.HttpsError('permission-denied', 'No tiene permisos para esta operaciÃ³n.');
     }
     return authData;
 }
@@ -153,7 +164,7 @@ async function writeAuditLog(payload) {
 }
 function ensureStoragePath(storagePath, expectedPrefix) {
     if (!storagePath.startsWith(expectedPrefix)) {
-        throw new functions.https.HttpsError('invalid-argument', 'La ruta del archivo no es válida.');
+        throw new functions.https.HttpsError('invalid-argument', 'La ruta del archivo no es vÃ¡lida.');
     }
 }
 function getClientMetadata(context) {
@@ -176,7 +187,7 @@ function buildDocumentHash(data) {
 function toIsoDateString(value) {
     const date = value ? new Date(value) : new Date();
     if (Number.isNaN(date.getTime())) {
-        throw new functions.https.HttpsError('invalid-argument', 'La fecha suministrada no es válida.');
+        throw new functions.https.HttpsError('invalid-argument', 'La fecha suministrada no es vÃ¡lida.');
     }
     return date.toISOString();
 }
@@ -201,10 +212,6 @@ function parseExcelDate(value) {
     return Number.isNaN(parsed.getTime()) ? null : parsed;
 }
 function normalizeLocation(value) {
-    if (value === undefined || value === null) {
-        return exports.UNKNOWN_LOCATION;
-    }
-    const raw = String(value).trim();
-    return raw || exports.UNKNOWN_LOCATION;
+    return (0, assetCatalogs_1.resolveLocationName)(value === undefined || value === null ? undefined : value);
 }
 //# sourceMappingURL=security.js.map
