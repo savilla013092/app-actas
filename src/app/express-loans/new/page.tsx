@@ -31,6 +31,10 @@ import {
   buscarActivosDisponibles,
   SearchActiveAssetsCursor,
 } from '@/services/activoService';
+import {
+  EVIDENCE_FILE_ACCEPT,
+  getEvidenceUploadErrorDescription,
+} from '@/services/evidenceUploadService';
 import { createExpressLoan, getActiveExpressLoanByAsset } from '@/services/expressLoanService';
 import { Activo } from '@/types/activo';
 import { CreateExpressLoanDTO, ExpressLoanItemType } from '@/types/expressLoan';
@@ -282,6 +286,8 @@ export default function NewExpressLoanPage() {
           ? 'El item comodin requiere al menos una foto como soporte.'
           : error instanceof Error && error.message.includes('permission-denied')
           ? 'No tiene permisos para registrar prestamos express.'
+          : error instanceof Error && 'code' in error
+          ? getEvidenceUploadErrorDescription(error)
           : 'Hubo un error al guardar el prestamo. Revise la conexion e intentelo nuevamente.';
       setFormError(message);
     } finally {
@@ -609,7 +615,12 @@ export default function NewExpressLoanPage() {
                 <ImagePlus className='h-4 w-4' />
                 Registro fotografico
               </div>
-              <EvidenciasUploader evidencias={evidenceFiles} onChange={setEvidenceFiles} maxFiles={5} />
+              <EvidenciasUploader
+                evidencias={evidenceFiles}
+                onChange={setEvidenceFiles}
+                maxFiles={5}
+                accept={EVIDENCE_FILE_ACCEPT}
+              />
             </div>
           </section>
 

@@ -7,11 +7,10 @@
   query,
   where,
 } from 'firebase/firestore';
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import imageCompression from 'browser-image-compression';
 
-import { db, storage } from '@/lib/firebase/config';
+import { db } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
+import { cleanupUploadedFiles, uploadFilesToStorage } from '@/services/evidenceUploadService';
 import {
   CreateExpressLoanDTO,
   ExpressLoan,
@@ -21,11 +20,6 @@ import {
 
 const COLLECTION_NAME = 'express_loans';
 const STORAGE_PATH = 'express_loans';
-const IMAGE_UPLOAD_OPTIONS = {
-  maxSizeMB: 1,
-  maxWidthOrHeight: 1920,
-  useWebWorker: true,
-};
 
 const toIsoString = (value: unknown, fallback = ''): string => {
   if (typeof value === 'string') {
@@ -95,30 +89,6 @@ const mapExpressLoan = (id: string, data: Record<string, unknown>): ExpressLoan 
   };
 };
 
-const uploadEvidenceFile = async (
-  loanId: string,
-  file: File,
-  index: number
-): Promise<{ evidence: ExpressLoanEvidence; storagePath: string }> => {
-  const compressedFile = await imageCompression(file, IMAGE_UPLOAD_OPTIONS);
-  const fileName = `${Date.now()}_${index}_${file.name}`;
-  const storagePath = `${STORAGE_PATH}/${loanId}/${fileName}`;
-  const storageRef = ref(storage, storagePath);
-
-  await uploadBytes(storageRef, compressedFile);
-  const url = await getDownloadURL(storageRef);
-
-  return {
-    storagePath,
-    evidence: {
-      id: fileName,
-      url,
-      nombre: file.name,
-      subidaEn: new Date().toISOString(),
-    },
-  };
-};
-
 export const getActiveExpressLoanByAsset = async (assetId: string): Promise<ExpressLoan | null> => {
   const q = query(
     collection(db, COLLECTION_NAME),
@@ -150,16 +120,21 @@ export const createExpressLoan = async (
   }
 
   const loanId = doc(collection(db, COLLECTION_NAME)).id;
-  const uploadedPaths: string[] = [];
-  const evidences: Array<ExpressLoanEvidence & { storagePath: string }> = [];
+  let uploadedFiles: Array<ExpressLoanEvidence & { storagePath: string }> = [];
 
   try {
-    for (let index = 0; index < evidenceFiles.length; index += 1) {
-      const file = evidenceFiles[index];
-      const result = await uploadEvidenceFile(loanId, file, index + 1);
-      uploadedPaths.push(result.storagePath);
-      evidences.push({ ...result.evidence, storagePath: result.storagePath });
-    }
+    uploadedFiles = (await uploadFilesToStorage({
+      documentId: loanId,
+      storagePrefix: STORAGE_PATH,
+      files: evidenceFiles,
+      buildNombre: (_index, file) => file.name,
+    })).map((file) => ({
+      id: file.id,
+      url: file.url,
+      nombre: file.nombre,
+      subidaEn: new Date().toISOString(),
+      storagePath: file.storagePath,
+    }));
 
     const response = await callCallable<
       CreateExpressLoanDTO & {
@@ -170,7 +145,7 @@ export const createExpressLoan = async (
     >('createExpressLoan', {
       ...data,
       loanId,
-      evidences: evidences.map((file) => ({
+      evidences: uploadedFiles.map((file) => ({
         id: file.id,
         storagePath: file.storagePath,
         url: file.url,
@@ -180,7 +155,7 @@ export const createExpressLoan = async (
 
     return response.id;
   } catch (error) {
-    await Promise.allSettled(uploadedPaths.map((path) => deleteObject(ref(storage, path))));
+    await cleanupUploadedFiles(uploadedFiles.map((file) => file.storagePath));
     throw error;
   }
 };

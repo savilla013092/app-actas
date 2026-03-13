@@ -12,6 +12,7 @@ interface EvidenciasUploaderProps {
   onChange: (files: File[]) => void;
   maxFiles: number;
   accept?: string;
+  helperText?: string;
 }
 
 function PreviewImage({ file, index }: { file: File; index: number }) {
@@ -43,6 +44,7 @@ export function EvidenciasUploader({
   onChange,
   maxFiles,
   accept = 'image/*',
+  helperText = 'Formatos permitidos: JPG, PNG, HEIC y HEIF. Las fotos de iPhone se convierten automaticamente a JPG.',
 }: EvidenciasUploaderProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files) {
@@ -70,6 +72,10 @@ export function EvidenciasUploader({
 
   return (
     <div className='space-y-4'>
+      {helperText ? (
+        <p className='text-xs text-muted-foreground'>{helperText}</p>
+      ) : null}
+
       <div className='grid grid-cols-2 gap-4 md:grid-cols-3'>
         {evidencias.map((file, index) => (
           <div
@@ -77,6 +83,11 @@ export function EvidenciasUploader({
             className='group relative aspect-square overflow-hidden rounded-lg border border-border'
           >
             <PreviewImage file={file} index={index} />
+            <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/75 to-transparent px-3 py-2 text-[11px] text-white'>
+              <p className='truncate' title={file.name}>
+                {file.name}
+              </p>
+            </div>
             <button
               type='button'
               onClick={() => removeFile(index)}
