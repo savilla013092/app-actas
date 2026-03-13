@@ -1,0 +1,308 @@
+'use client';
+
+import { useEffect, useState } from 'react';
+import Image from 'next/image';
+import { useParams } from 'next/navigation';
+import {
+  LucideBox,
+  LucideCheckCircle,
+  LucideClock,
+  LucideDownload,
+  LucideFileText,
+  LucideMapPin,
+  LucidePenTool,
+  LucideUser,
+} from 'lucide-react';
+
+import { PageHeader } from '@/components/layout/PageHeader';
+import { SignaturePad } from '@/components/signature/SignaturePad';
+import { Badge } from '@/components/ui/badge';
+import { Button } from '@/components/ui/button';
+import { Card } from '@/components/ui/card';
+import { Spinner } from '@/components/ui/spinner';
+import { toast } from '@/components/ui/toast';
+import { useAuth } from '@/hooks/useAuth';
+import {
+  firmarAsignacionComoCustodio,
+  obtenerAsignacionInicial,
+} from '@/services/asignacionService';
+import { AsignacionInicial } from '@/types/asignacion';
+
+export default function AsignacionInicialDetailPage() {
+  const { id } = useParams();
+  const { user, isCustodio } = useAuth();
+  const [assignment, setAssignment] = useState<AsignacionInicial | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [signing, setSigning] = useState(false);
+  const [showSignaturePad, setShowSignaturePad] = useState(false);
+
+  useEffect(() => {
+    async function loadData() {
+      if (!id) {
+        return;
+      }
+
+      try {
+        const data = await obtenerAsignacionInicial(id as string);
+        setAssignment(data);
+      } catch (error) {
+        console.error('Error loading initial assignment:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    void loadData();
+  }, [id]);
+
+  const handleFirmaCustodio = async (
+    firmaDataUrl: string,
+    datosFirmante?: { nombre: string; cedula: string }
+  ) => {
+    if (!assignment) {
+      return;
+    }
+
+    setSigning(true);
+    try {
+      await firmarAsignacionComoCustodio(assignment.id, firmaDataUrl, assignment, datosFirmante);
+      const updated = await obtenerAsignacionInicial(assignment.id);
+      setAssignment(updated);
+      setShowSignaturePad(false);
+      toast({ title: 'Firma registrada', description: 'La firma del custodio quedó registrada correctamente.' });
+    } catch (error) {
+      console.error('Error signing initial assignment:', error);
+      toast({
+        title: 'No fue posible registrar la firma',
+        description: 'Verifique que la asignación siga pendiente y que su perfil corresponda al custodio titular.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSigning(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className='flex h-64 items-center justify-center'>
+        <Spinner size='lg' />
+      </div>
+    );
+  }
+
+  if (!assignment) {
+    return <div className='py-12 text-center text-red-500'>Asignación inicial no encontrada.</div>;
+  }
+
+  const canSign =
+    assignment.estado === 'pendiente_firma_custodio' && isCustodio() && assignment.custodioId === user?.uid;
+
+  const actions = [] as Array<{
+    label: string;
+    onClick: () => void;
+    icon: React.ReactNode;
+    variant: 'default' | 'outline' | 'ghost' | 'destructive' | 'success' | 'warning' | 'info';
+  }>;
+
+  if (assignment.actaPdfUrl) {
+    actions.push({
+      label: 'Descargar PDF',
+      onClick: () => window.open(assignment.actaPdfUrl, '_blank'),
+      icon: <LucideDownload size={18} />,
+      variant: 'default',
+    });
+  }
+
+  if (canSign) {
+    actions.push({
+      label: 'Firmar acta',
+      onClick: () => setShowSignaturePad(true),
+      icon: <LucidePenTool size={18} />,
+      variant: 'warning',
+    });
+  }
+
+  const getEstadoBadgeVariant = () => {
+    switch (assignment.estado) {
+      case 'completada':
+        return 'completed';
+      case 'pendiente_firma_custodio':
+        return 'pending';
+      case 'firmada_completa':
+        return 'info';
+      case 'borrador':
+        return 'secondary';
+      default:
+        return 'outline';
+    }
+  };
+
+  return (
+    <div className='mx-auto max-w-4xl space-y-8'>
+      <PageHeader
+        title={assignment.numeroActa || 'Asignación inicial en proceso'}
+        subtitle={`ID: ${assignment.id.substring(0, 8).toUpperCase()}`}
+        breadcrumbItems={[
+          { label: 'Activos', href: '/activos', icon: <LucideBox size={14} /> },
+          { label: assignment.codigoActivo, href: `/activos/${assignment.activoId}` },
+          { label: 'Asignación inicial' },
+        ]}
+        backHref={`/activos/${assignment.activoId}`}
+        actions={actions}
+      />
+
+      <div className='grid grid-cols-1 gap-6 md:grid-cols-3'>
+        <Card className='space-y-8 border-border/50 p-6 shadow-elegant md:col-span-2'>
+          <section>
+            <h3 className='mb-4 flex items-center gap-2 border-b border-border pb-2 text-lg font-bold text-foreground'>
+              <LucideBox size={20} className='text-primary' />
+              Información del activo
+            </h3>
+            <div className='grid grid-cols-2 gap-x-8 gap-y-4'>
+              <div>
+                <p className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>Código</p>
+                <p className='font-medium text-foreground'>{assignment.codigoActivo}</p>
+              </div>
+              <div>
+                <p className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>Ubicación</p>
+                <div className='flex items-center gap-1'>
+                  <LucideMapPin size={14} className='text-muted-foreground' />
+                  <p className='font-medium text-foreground'>{assignment.ubicacionActivo}</p>
+                </div>
+              </div>
+              <div className='col-span-2'>
+                <p className='text-xs font-bold uppercase tracking-wider text-muted-foreground'>Descripción</p>
+                <p className='font-medium text-foreground'>{assignment.descripcionActivo}</p>
+              </div>
+            </div>
+          </section>
+
+          <section>
+            <h3 className='mb-4 flex items-center gap-2 border-b border-border pb-2 text-lg font-bold text-foreground'>
+              <LucideFileText size={20} className='text-primary' />
+              Entrega y recibo
+            </h3>
+            <div className='space-y-4'>
+              <div>
+                <p className='mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground'>
+                  Descripción registrada
+                </p>
+                <div className='rounded-xl border border-border/50 bg-muted/50 p-4 text-sm italic leading-relaxed text-foreground'>
+                  &ldquo;{assignment.descripcion}&rdquo;
+                </div>
+              </div>
+              {assignment.observaciones ? (
+                <div>
+                  <p className='mb-1 text-xs font-bold uppercase tracking-wider text-muted-foreground'>
+                    Observaciones
+                  </p>
+                  <p className='text-sm text-muted-foreground'>{assignment.observaciones}</p>
+                </div>
+              ) : null}
+            </div>
+          </section>
+
+          <section>
+            <h3 className='mb-4 border-b border-border pb-2 text-lg font-bold text-foreground'>
+              Registro fotográfico
+            </h3>
+            <div className='grid grid-cols-2 gap-4 sm:grid-cols-3'>
+              {assignment.evidencias.map((evidencia) => (
+                <div
+                  key={evidencia.id}
+                  className='relative aspect-square overflow-hidden rounded-xl border border-border/50 bg-muted shadow-elegant'
+                >
+                  <Image
+                    src={evidencia.url}
+                    alt={evidencia.nombre}
+                    fill
+                    className='object-cover'
+                    unoptimized
+                  />
+                </div>
+              ))}
+            </div>
+          </section>
+        </Card>
+
+        <div className='space-y-6'>
+          <Card className='border-border/50 p-6 shadow-elegant'>
+            <h3 className='mb-4 flex items-center gap-2 border-b border-border pb-2 font-bold text-foreground'>
+              <LucideUser size={18} className='text-primary' />
+              Firmas y estados
+            </h3>
+
+            <div className='space-y-6'>
+              <div>
+                <p className='mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
+                  Estado del proceso
+                </p>
+                <div className='flex items-center gap-2'>
+                  {assignment.estado === 'completada' ? (
+                    <LucideCheckCircle className='text-green-500' size={20} />
+                  ) : (
+                    <LucideClock className='animate-pulse text-orange-500' size={20} />
+                  )}
+                  <Badge variant={getEstadoBadgeVariant()}>{assignment.estado.replace(/_/g, ' ')}</Badge>
+                </div>
+              </div>
+
+              <div className='border-t pt-4'>
+                <p className='mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
+                  Profesional revisor
+                </p>
+                <p className='text-sm font-bold text-foreground'>{assignment.revisorNombre}</p>
+                <p className='text-xs text-muted-foreground'>Logística</p>
+                {assignment.firmaRevisor ? (
+                  <div className='mt-2 flex items-center gap-2 text-green-600'>
+                    <LucideCheckCircle size={14} />
+                    <span className='text-[10px] font-bold uppercase'>Firmado</span>
+                  </div>
+                ) : (
+                  <Badge variant='error' size='sm' className='mt-2'>
+                    Pendiente
+                  </Badge>
+                )}
+              </div>
+
+              <div className='border-t pt-4'>
+                <p className='mb-2 text-[10px] font-bold uppercase tracking-wider text-muted-foreground'>
+                  Custodio responsable
+                </p>
+                <p className='text-sm font-bold text-foreground'>{assignment.custodioNombre}</p>
+                <p className='text-xs text-muted-foreground'>Dependencia: {assignment.ubicacionActivo}</p>
+                {assignment.firmaCustodio ? (
+                  <div className='mt-2 flex items-center gap-2 text-green-600'>
+                    <LucideCheckCircle size={14} />
+                    <span className='text-[10px] font-bold uppercase'>Firmado</span>
+                  </div>
+                ) : (
+                  <Badge variant='pending' size='sm' className='mt-2'>
+                    Esperando firma
+                  </Badge>
+                )}
+              </div>
+            </div>
+          </Card>
+        </div>
+      </div>
+
+      {showSignaturePad ? (
+        <div className='fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4 backdrop-blur-sm'>
+          <div className='w-full max-w-xl animate-scale-in'>
+            <SignaturePad
+              titulo='Firma del custodio del activo'
+              nombreFirmante={assignment.custodioNombre || user?.usuario?.nombre || ''}
+              cedulaFirmante={assignment.custodioCedula || user?.usuario?.cedula || ''}
+              declaracion='Certifico que recibo el activo descrito, acepto mi responsabilidad sobre su uso y conservación, y declaro que la información registrada es veraz.'
+              onSave={handleFirmaCustodio}
+              onCancel={() => setShowSignaturePad(false)}
+              permitirEdicion
+            />
+            {signing ? <p className='mt-3 text-center text-sm text-white'>Registrando firma...</p> : null}
+          </div>
+        </div>
+      ) : null}
+    </div>
+  );
+}

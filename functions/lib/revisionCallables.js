@@ -38,6 +38,7 @@ const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions"));
 const security_1 = require("./security");
 exports.createRevisionDraft = functions.region(security_1.REGION).https.onCall(async (data, context) => {
+    var _a;
     const actor = (0, security_1.ensureRole)(context, ['admin', 'logistica']);
     const payload = data;
     if (!payload.activoId || !payload.codigoActivo || !payload.custodioId || !payload.descripcion || !payload.fecha) {
@@ -46,6 +47,17 @@ exports.createRevisionDraft = functions.region(security_1.REGION).https.onCall(a
     const activoSnapshot = await security_1.db.collection('activos').doc(payload.activoId).get();
     if (!activoSnapshot.exists) {
         throw new functions.https.HttpsError('not-found', 'El activo seleccionado ya no existe.');
+    }
+    const activo = activoSnapshot.data();
+    const estadoAsignacionInicial = (_a = activo.estadoAsignacionInicial) !== null && _a !== void 0 ? _a : (activo.custodioId ? 'completada' : 'no_requerida');
+    if (!activo.custodioId) {
+        throw new functions.https.HttpsError('failed-precondition', 'El activo debe tener custodio asignado antes de iniciar una revisión.');
+    }
+    if (estadoAsignacionInicial !== 'completada') {
+        throw new functions.https.HttpsError('failed-precondition', 'La asignación inicial del activo debe estar completada antes de registrar revisiones.');
+    }
+    if (activo.custodioId !== payload.custodioId) {
+        throw new functions.https.HttpsError('failed-precondition', 'El custodio del activo cambió. Recargue el formulario antes de continuar.');
     }
     const revisionRef = security_1.db.collection('revisiones').doc();
     const revisionDoc = (0, security_1.stripUndefinedDeep)({

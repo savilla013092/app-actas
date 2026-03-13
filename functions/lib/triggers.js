@@ -33,10 +33,11 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onDocumentoModificado = exports.onRevisionFirmadaCompleta = exports.onActivoWriteSyncSearch = exports.onUsuarioWriteSyncClaims = void 0;
+exports.onDocumentoModificado = exports.onAsignacionFirmadaCompleta = exports.onRevisionFirmadaCompleta = exports.onActivoWriteSyncSearch = exports.onUsuarioWriteSyncClaims = void 0;
 const admin = __importStar(require("firebase-admin"));
 const functions = __importStar(require("firebase-functions"));
 const consecutivos_1 = require("./consecutivos");
+const generarActaAsignacionPDF_1 = require("./generarActaAsignacionPDF");
 const generarActaPDF_1 = require("./generarActaPDF");
 const security_1 = require("./security");
 exports.onUsuarioWriteSyncClaims = functions.region(security_1.REGION).firestore
@@ -124,11 +125,77 @@ exports.onRevisionFirmadaCompleta = functions.region(security_1.REGION).firestor
         return { success: false, error: String(error) };
     }
 });
+exports.onAsignacionFirmadaCompleta = functions.region(security_1.REGION).firestore
+    .document('asignaciones/{assignmentId}')
+    .onUpdate(async (change, context) => {
+    var _a, _b;
+    const beforeData = change.before.data();
+    const afterData = change.after.data();
+    const assignmentId = context.params.assignmentId;
+    if (beforeData.estado === 'firmada_completa' || afterData.estado !== 'firmada_completa') {
+        return null;
+    }
+    if (!((_a = afterData.firmaRevisor) === null || _a === void 0 ? void 0 : _a.url) || !((_b = afterData.firmaCustodio) === null || _b === void 0 ? void 0 : _b.url)) {
+        console.error('La asignación firmada no tiene ambas firmas.', assignmentId);
+        return null;
+    }
+    try {
+        const numeroActa = await (0, consecutivos_1.generarConsecutivo)(security_1.db);
+        const pdfBuffer = await (0, generarActaAsignacionPDF_1.generarActaAsignacionPDF)({
+            numeroActa,
+            asignacion: afterData,
+            storage: security_1.storage,
+        });
+        const bucket = security_1.storage.bucket();
+        const pdfPath = `actas/asignacion-${assignmentId}.pdf`;
+        const file = bucket.file(pdfPath);
+        await file.save(pdfBuffer, {
+            metadata: {
+                contentType: 'application/pdf',
+            },
+        });
+        await file.makePublic();
+        const pdfUrl = `https://storage.googleapis.com/${bucket.name}/${pdfPath}`;
+        await Promise.all([
+            change.after.ref.update({
+                numeroActa,
+                actaPdfUrl: pdfUrl,
+                estado: 'completada',
+                actualizadoEn: (0, security_1.serverTimestamp)(),
+            }),
+            security_1.db.collection('activos').doc(afterData.activoId).set({
+                estadoAsignacionInicial: 'completada',
+                asignacionInicialId: assignmentId,
+                asignacionInicialCompletadaEn: (0, security_1.serverTimestamp)(),
+                actualizadoEn: (0, security_1.serverTimestamp)(),
+                actualizadoPor: 'system',
+            }, { merge: true }),
+        ]);
+        await (0, security_1.writeAuditLog)({
+            accion: 'completar_asignacion_inicial',
+            modulo: 'asignaciones',
+            documentoId: assignmentId,
+            usuarioId: 'system',
+            usuarioEmail: 'system@serviciudad.gov.co',
+            descripcion: `Acta ${numeroActa} de asignación inicial generada automáticamente.`,
+        });
+        return { success: true, numeroActa };
+    }
+    catch (error) {
+        console.error('Error al generar el acta PDF de asignación inicial:', error);
+        await change.after.ref.update({
+            estado: 'anulada',
+            errorMensaje: String(error),
+            actualizadoEn: (0, security_1.serverTimestamp)(),
+        });
+        return { success: false, error: String(error) };
+    }
+});
 exports.onDocumentoModificado = functions.region(security_1.REGION).firestore
     .document('{coleccion}/{docId}')
     .onWrite(async (change, context) => {
     const collectionName = context.params.coleccion;
-    if (!['usuarios', 'activos', 'revisiones', 'express_loans'].includes(collectionName)) {
+    if (!['usuarios', 'activos', 'revisiones', 'asignaciones', 'express_loans'].includes(collectionName)) {
         return null;
     }
     const beforeData = change.before.exists ? change.before.data() : null;

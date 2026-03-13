@@ -1,7 +1,8 @@
-﻿import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 
 import {
+  ActaWorkflowState,
   REGION,
   RevisionState,
   UploadedFilePayload,
@@ -46,6 +47,34 @@ export const createRevisionDraft = functions.region(REGION).https.onCall(async (
   const activoSnapshot = await db.collection('activos').doc(payload.activoId).get();
   if (!activoSnapshot.exists) {
     throw new functions.https.HttpsError('not-found', 'El activo seleccionado ya no existe.');
+  }
+
+  const activo = activoSnapshot.data() as {
+    custodioId?: string;
+    estadoAsignacionInicial?: 'no_requerida' | 'pendiente' | 'completada';
+  };
+  const estadoAsignacionInicial =
+    activo.estadoAsignacionInicial ?? (activo.custodioId ? 'completada' : 'no_requerida');
+
+  if (!activo.custodioId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'El activo debe tener custodio asignado antes de iniciar una revisión.'
+    );
+  }
+
+  if (estadoAsignacionInicial !== 'completada') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'La asignación inicial del activo debe estar completada antes de registrar revisiones.'
+    );
+  }
+
+  if (activo.custodioId !== payload.custodioId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'El custodio del activo cambió. Recargue el formulario antes de continuar.'
+    );
   }
 
   const revisionRef = db.collection('revisiones').doc();
@@ -93,7 +122,7 @@ export const registerRevisionEvidence = functions.region(REGION).https.onCall(as
     throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
   }
 
-  const revision = revisionSnapshot.data() as { estado?: RevisionState; evidencias?: unknown[] };
+  const revision = revisionSnapshot.data() as { estado?: ActaWorkflowState; evidencias?: unknown[] };
   if (revision.estado !== 'borrador' && revision.estado !== 'pendiente_firma_custodio') {
     throw new functions.https.HttpsError('failed-precondition', 'La revisión no admite nuevas evidencias.');
   }

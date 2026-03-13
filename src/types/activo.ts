@@ -1,4 +1,5 @@
-﻿import { AssetSearchIndex } from '@/lib/utils/assetSearch';
+import { AssetSearchIndex } from '@/lib/utils/assetSearch';
+import { EstadoAsignacionInicial } from '@/types/asignacion';
 
 export type EstadoActivoFisico = 'activo' | 'baja' | 'traslado' | 'mantenimiento';
 
@@ -19,6 +20,9 @@ export interface Activo {
   fechaAdquisicion?: Date;
   observaciones?: string;
   search?: AssetSearchIndex;
+  estadoAsignacionInicial: EstadoAsignacionInicial;
+  asignacionInicialId?: string;
+  asignacionInicialCompletadaEn?: Date;
   creadoEn: Date;
   actualizadoEn: Date;
   creadoPor: string;

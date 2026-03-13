@@ -20,12 +20,17 @@ import { SkeletonCard } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { contarActivosPorCategoria, contarActivosPorEstado } from '@/services/activoService';
 import {
+  obtenerAsignacionesPendientesFirma,
+  obtenerTodasAsignacionesPendientes,
+} from '@/services/asignacionService';
+import {
   contarRevisionesPorMes,
   obtenerEstadisticasRevisiones,
   obtenerRevisionesPendientesFirma,
   obtenerRevisionesRecientes,
   obtenerTodasPendientesFirma,
 } from '@/services/revisionService';
+import { AsignacionInicial } from '@/types/asignacion';
 import { Revision } from '@/types/revision';
 
 const RevisionesPorMesChart = dynamic(
@@ -87,6 +92,7 @@ export default function DashboardPage() {
   const [stats, setStats] = useState<Stats | null>(null);
   const [revisionesRecientes, setRevisionesRecientes] = useState<Revision[]>([]);
   const [pendientesFirma, setPendientesFirma] = useState<Revision[]>([]);
+  const [pendientesAsignacion, setPendientesAsignacion] = useState<AsignacionInicial[]>([]);
   const [charts, setCharts] = useState<DashboardCharts>({
     revisionesPorMes: [],
     activosPorEstado: [],
@@ -110,16 +116,21 @@ export default function DashboardPage() {
         const pendientesPromise = isCustodian
           ? obtenerRevisionesPendientesFirma(user.uid)
           : obtenerTodasPendientesFirma(5);
+        const pendientesAsignacionPromise = isCustodian
+          ? obtenerAsignacionesPendientesFirma(user.uid)
+          : obtenerTodasAsignacionesPendientes(5);
 
-        const [estadisticas, recientes, pendientes] = await Promise.all([
+        const [estadisticas, recientes, pendientes, asignacionesPendientes] = await Promise.all([
           statsPromise,
           recientesPromise,
           pendientesPromise,
+          pendientesAsignacionPromise,
         ]);
 
         setStats(estadisticas);
         setRevisionesRecientes(recientes);
         setPendientesFirma(isCustodian ? pendientes : pendientes.slice(0, 5));
+        setPendientesAsignacion(isCustodian ? asignacionesPendientes : asignacionesPendientes.slice(0, 5));
 
         if (!isCustodian) {
           const twelveMonths = buildMonthRanges(12);
@@ -376,6 +387,46 @@ export default function DashboardPage() {
           </div>
         </Card>
       </div>
+
+      <Card className='border-border/50 p-6 shadow-elegant'>
+        <div className='mb-6 flex items-center justify-between'>
+          <h3 className='text-lg font-bold text-foreground'>
+            {isCustodian ? 'Mis asignaciones iniciales' : 'Asignaciones iniciales pendientes'}
+          </h3>
+          <Badge variant='pending' size='sm'>
+            {pendientesAsignacion.length} pendiente{pendientesAsignacion.length !== 1 ? 's' : ''}
+          </Badge>
+        </div>
+        <div className='space-y-3'>
+          {pendientesAsignacion.length > 0 ? (
+            pendientesAsignacion.map((assignment) => (
+              <Link href={`/asignaciones/${assignment.id}`} key={assignment.id}>
+                <div className='cursor-pointer rounded-xl border border-sky-100 bg-sky-50/50 p-4 transition-all duration-200 hover:bg-sky-50'>
+                  <div className='flex items-center justify-between gap-4'>
+                    <div>
+                      <p className='text-sm font-semibold text-foreground'>{assignment.codigoActivo}</p>
+                      <p className='text-xs text-muted-foreground'>
+                        {isCustodian
+                          ? 'Pendiente tu firma de asignación inicial'
+                          : `Entrega inicial para ${assignment.custodioNombre}`}
+                      </p>
+                    </div>
+                    <Button variant='outline' size='sm' className='border-sky-200 text-sky-700 hover:bg-sky-100'>
+                      {isCustodian ? 'Firmar' : 'Ver'}
+                    </Button>
+                  </div>
+                </div>
+              </Link>
+            ))
+          ) : (
+            <div className='py-12 text-center text-muted-foreground'>
+              <LucideClipboardCheck className='mx-auto mb-3 text-sky-500' size={40} />
+              <p>Sin asignaciones iniciales pendientes</p>
+              <p className='mt-1 text-sm'>No hay actas iniciales esperando firma en este momento.</p>
+            </div>
+          )}
+        </div>
+      </Card>
     </div>
   );
 }

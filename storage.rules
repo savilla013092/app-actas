@@ -27,6 +27,11 @@ service firebase.storage {
       return isAdmin() || isLogistica();
     }
 
+    function isSupportedEvidenceImage() {
+      return request.resource.contentType == 'image/jpeg' ||
+        request.resource.contentType == 'image/png';
+    }
+
     function revisionExists(revisionId) {
       return firestore.exists(/databases/(default)/documents/revisiones/$(revisionId));
     }
@@ -47,12 +52,32 @@ service firebase.storage {
         revisionDoc(revisionId).custodioId == request.auth.uid;
     }
 
+    function assignmentExists(assignmentId) {
+      return firestore.exists(/databases/(default)/documents/asignaciones/$(assignmentId));
+    }
+
+    function assignmentDoc(assignmentId) {
+      return firestore.get(/databases/(default)/documents/asignaciones/$(assignmentId)).data;
+    }
+
+    function isOpenAssignmentState(assignmentId) {
+      return assignmentExists(assignmentId) &&
+        (assignmentDoc(assignmentId).estado == 'borrador' ||
+          assignmentDoc(assignmentId).estado == 'pendiente_firma_custodio');
+    }
+
+    function isAssignmentCustodian(assignmentId) {
+      return isCustodio() &&
+        assignmentExists(assignmentId) &&
+        assignmentDoc(assignmentId).custodioId == request.auth.uid;
+    }
+
     match /evidencias/{revisionId}/{fileName} {
       allow read: if isAdminOrLogistica() || isRevisionCustodian(revisionId);
       allow write: if isAdminOrLogistica() &&
         isOpenRevisionState(revisionId) &&
         request.resource.size < 5 * 1024 * 1024 &&
-        request.resource.contentType.matches('image/.*');
+        isSupportedEvidenceImage();
     }
 
     match /firmas/{revisionId}/{fileName} {
@@ -68,6 +93,31 @@ service firebase.storage {
       allow write: if fileName == 'custodio.png' &&
         isRevisionCustodian(revisionId) &&
         revisionDoc(revisionId).estado == 'pendiente_firma_custodio' &&
+        request.resource.size < 500 * 1024 &&
+        request.resource.contentType == 'image/png';
+    }
+
+    match /asignaciones-evidencias/{assignmentId}/{fileName} {
+      allow read: if isAdminOrLogistica() || isAssignmentCustodian(assignmentId);
+      allow write: if isAdminOrLogistica() &&
+        isOpenAssignmentState(assignmentId) &&
+        request.resource.size < 5 * 1024 * 1024 &&
+        isSupportedEvidenceImage();
+    }
+
+    match /asignaciones-firmas/{assignmentId}/{fileName} {
+      allow read: if isAdminOrLogistica() || isAssignmentCustodian(assignmentId);
+
+      allow write: if fileName == 'revisor.png' &&
+        isAdminOrLogistica() &&
+        assignmentExists(assignmentId) &&
+        assignmentDoc(assignmentId).estado == 'borrador' &&
+        request.resource.size < 500 * 1024 &&
+        request.resource.contentType == 'image/png';
+
+      allow write: if fileName == 'custodio.png' &&
+        isAssignmentCustodian(assignmentId) &&
+        assignmentDoc(assignmentId).estado == 'pendiente_firma_custodio' &&
         request.resource.size < 500 * 1024 &&
         request.resource.contentType == 'image/png';
     }

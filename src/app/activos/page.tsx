@@ -21,6 +21,7 @@ import { Card } from '@/components/ui/card';
 import { SkeletonList, SkeletonTable } from '@/components/ui/skeleton';
 import { useAuth } from '@/hooks/useAuth';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { resolveInitialAssignmentStatus } from '@/lib/utils/initialAssignment';
 import { getAssetLocation } from '@/lib/utils/assetLocation';
 import { exportToExcel, activosExportColumns } from '@/lib/utils/export';
 import { obtenerActivosPaginados } from '@/services/activoService';
@@ -35,6 +36,18 @@ type ClassifiedActivo = Activo & {
     locationName: string;
     locationMapped: boolean;
 };
+
+type WorkflowAction =
+    | {
+          kind: 'link';
+          label: string;
+          href: string;
+      }
+    | {
+          kind: 'helper';
+          label: string;
+          helper: string;
+      };
 
 const mergeActivos = (current: Activo[], incoming: Activo[]) => {
     const itemsById = new Map(current.map(item => [item.id, item]));
@@ -55,6 +68,32 @@ const getEstadoVariant = (estado: Activo['estado']) => {
     }
 
     return 'outline' as const;
+};
+
+const getWorkflowAction = (activo: Activo): WorkflowAction => {
+    const initialAssignmentStatus = resolveInitialAssignmentStatus(activo);
+
+    if (!activo.custodioId) {
+        return {
+            kind: 'helper',
+            label: 'Asignar custodio',
+            helper: 'Primero debe asignarse un custodio.',
+        };
+    }
+
+    if (initialAssignmentStatus !== 'completada') {
+        return {
+            label: 'Asignación inicial',
+            kind: 'link',
+            href: `/asignaciones/nueva/${activo.id}`,
+        };
+    }
+
+    return {
+        label: 'Revisar',
+        kind: 'link',
+        href: `/revision/nueva/${activo.id}`,
+    };
 };
 
 export default function ActivosPage() {
@@ -218,9 +257,19 @@ export default function ActivosPage() {
         }
     };
 
-    const handleFormSuccess = async (_activoId: string) => {
+    const handleFormSuccess = async ({
+        redirectTo,
+    }: {
+        activoId: string;
+        redirectTo?: string;
+    }) => {
         setShowEditForm(false);
         setEditingActivo(null);
+        if (redirectTo) {
+            router.push(redirectTo);
+            return;
+        }
+
         await handleReloadFirstPage();
     };
 
@@ -494,7 +543,10 @@ export default function ActivosPage() {
                                         </tr>
                                     </thead>
                                     <tbody className='divide-y divide-border/60'>
-                                        {filteredActivos.map(activo => (
+                                        {filteredActivos.map(activo => {
+                                            const workflowAction = getWorkflowAction(activo);
+
+                                            return (
                                             <tr key={activo.id} className='hover:bg-muted/30'>
                                                 <td className='px-4 py-3 align-top'>
                                                     <Link href={`/activos/${activo.id}`} className='font-mono text-xs font-semibold text-foreground hover:text-primary'>
@@ -540,9 +592,15 @@ export default function ActivosPage() {
                                                         </Button>
                                                         {canManageActivos && (
                                                             <>
-                                                                <Button asChild variant='ghost' size='sm'>
-                                                                    <Link href={`/revision/nueva/${activo.id}`}>Revisar</Link>
-                                                                </Button>
+                                                                {workflowAction.kind === 'link' ? (
+                                                                    <Button asChild variant='ghost' size='sm'>
+                                                                        <Link href={workflowAction.href}>{workflowAction.label}</Link>
+                                                                    </Button>
+                                                                ) : (
+                                                                    <span className='inline-flex items-center rounded-md border border-border px-2 py-1 text-xs text-muted-foreground'>
+                                                                        {workflowAction.helper}
+                                                                    </span>
+                                                                )}
                                                                 <Button
                                                                     type='button'
                                                                     variant='ghost'
@@ -556,7 +614,8 @@ export default function ActivosPage() {
                                                     </div>
                                                 </td>
                                             </tr>
-                                        ))}
+                                            );
+                                        })}
                                     </tbody>
                                 </table>
                             </div>
@@ -564,7 +623,10 @@ export default function ActivosPage() {
                     </div>
 
                     <div className='space-y-3 lg:hidden'>
-                        {filteredActivos.map(activo => (
+                        {filteredActivos.map(activo => {
+                            const workflowAction = getWorkflowAction(activo);
+
+                            return (
                             <Card key={activo.id} className='border-border/50 p-4'>
                                 <div className='flex items-start justify-between gap-3'>
                                     <div className='min-w-0 flex-1'>
@@ -599,9 +661,15 @@ export default function ActivosPage() {
                                     </Button>
                                     {canManageActivos && (
                                         <>
-                                            <Button asChild variant='outline' size='sm'>
-                                                <Link href={`/revision/nueva/${activo.id}`}>Revisar</Link>
-                                            </Button>
+                                            {workflowAction.kind === 'link' ? (
+                                                <Button asChild variant='outline' size='sm'>
+                                                    <Link href={workflowAction.href}>{workflowAction.label}</Link>
+                                                </Button>
+                                            ) : (
+                                                <span className='inline-flex items-center rounded-md border border-border px-3 py-2 text-xs text-muted-foreground'>
+                                                    {workflowAction.helper}
+                                                </span>
+                                            )}
                                             <Button
                                                 type='button'
                                                 variant='ghost'
@@ -614,7 +682,8 @@ export default function ActivosPage() {
                                     )}
                                 </div>
                             </Card>
-                        ))}
+                            );
+                        })}
                     </div>
                 </>
             ) : (
@@ -634,7 +703,7 @@ export default function ActivosPage() {
                     <div className='w-full max-w-2xl animate-scale-in'>
                         <ActivoForm
                             activo={editingActivo}
-                            onSuccess={(activoId) => void handleFormSuccess(activoId)}
+                            onSuccess={(result) => void handleFormSuccess(result)}
                             onCancel={() => {
                                 setShowEditForm(false);
                                 setEditingActivo(null);

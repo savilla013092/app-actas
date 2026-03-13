@@ -1,7 +1,8 @@
-﻿import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 import * as functions from 'firebase-functions';
 
 import { generarConsecutivo } from './consecutivos';
+import { generarActaAsignacionPDF } from './generarActaAsignacionPDF';
 import { generarActaPDF } from './generarActaPDF';
 import {
   ManagedUserProfile,
@@ -115,11 +116,88 @@ export const onRevisionFirmadaCompleta = functions.region(REGION).firestore
     }
   });
 
+export const onAsignacionFirmadaCompleta = functions.region(REGION).firestore
+  .document('asignaciones/{assignmentId}')
+  .onUpdate(async (change, context) => {
+    const beforeData = change.before.data();
+    const afterData = change.after.data();
+    const assignmentId = context.params.assignmentId;
+
+    if (beforeData.estado === 'firmada_completa' || afterData.estado !== 'firmada_completa') {
+      return null;
+    }
+
+    if (!afterData.firmaRevisor?.url || !afterData.firmaCustodio?.url) {
+      console.error('La asignación firmada no tiene ambas firmas.', assignmentId);
+      return null;
+    }
+
+    try {
+      const numeroActa = await generarConsecutivo(db);
+      const pdfBuffer = await generarActaAsignacionPDF({
+        numeroActa,
+        asignacion: afterData,
+        storage,
+      });
+
+      const bucket = storage.bucket();
+      const pdfPath = `actas/asignacion-${assignmentId}.pdf`;
+      const file = bucket.file(pdfPath);
+
+      await file.save(pdfBuffer, {
+        metadata: {
+          contentType: 'application/pdf',
+        },
+      });
+
+      await file.makePublic();
+      const pdfUrl = `https://storage.googleapis.com/${bucket.name}/${pdfPath}`;
+
+      await Promise.all([
+        change.after.ref.update({
+          numeroActa,
+          actaPdfUrl: pdfUrl,
+          estado: 'completada',
+          actualizadoEn: serverTimestamp(),
+        }),
+        db.collection('activos').doc(afterData.activoId).set(
+          {
+            estadoAsignacionInicial: 'completada',
+            asignacionInicialId: assignmentId,
+            asignacionInicialCompletadaEn: serverTimestamp(),
+            actualizadoEn: serverTimestamp(),
+            actualizadoPor: 'system',
+          },
+          { merge: true }
+        ),
+      ]);
+
+      await writeAuditLog({
+        accion: 'completar_asignacion_inicial',
+        modulo: 'asignaciones',
+        documentoId: assignmentId,
+        usuarioId: 'system',
+        usuarioEmail: 'system@serviciudad.gov.co',
+        descripcion: `Acta ${numeroActa} de asignación inicial generada automáticamente.`,
+      });
+
+      return { success: true, numeroActa };
+    } catch (error) {
+      console.error('Error al generar el acta PDF de asignación inicial:', error);
+      await change.after.ref.update({
+        estado: 'anulada',
+        errorMensaje: String(error),
+        actualizadoEn: serverTimestamp(),
+      });
+      return { success: false, error: String(error) };
+    }
+  });
+
 export const onDocumentoModificado = functions.region(REGION).firestore
   .document('{coleccion}/{docId}')
   .onWrite(async (change, context) => {
     const collectionName = context.params.coleccion;
-    if (!['usuarios', 'activos', 'revisiones', 'express_loans'].includes(collectionName)) {
+    if (!['usuarios', 'activos', 'revisiones', 'asignaciones', 'express_loans'].includes(collectionName)) {
       return null;
     }
 
@@ -147,4 +225,3 @@ export const onDocumentoModificado = functions.region(REGION).firestore
 
     return null;
   });
-

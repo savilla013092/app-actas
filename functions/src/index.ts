@@ -1,4 +1,4 @@
-﻿import * as admin from 'firebase-admin';
+import * as admin from 'firebase-admin';
 
 admin.initializeApp();
 
@@ -9,6 +9,12 @@ export {
   adminUpdateUser,
   refreshSessionClaims,
 } from './userCallables';
+export {
+  createInitialAssignmentDraft,
+  registerInitialAssignmentCustodianSignature,
+  registerInitialAssignmentEvidence,
+  registerInitialAssignmentReviewerSignature,
+} from './assignmentCallables';
 export {
   createRevisionDraft,
   registerCustodianSignature,
@@ -23,6 +29,7 @@ export {
 } from './assetCallables';
 export {
   onActivoWriteSyncSearch,
+  onAsignacionFirmadaCompleta,
   onDocumentoModificado,
   onRevisionFirmadaCompleta,
   onUsuarioWriteSyncClaims,

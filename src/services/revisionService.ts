@@ -1,4 +1,4 @@
-﻿import {
+import {
   collection,
   doc,
   getCountFromServer,
@@ -12,19 +12,14 @@
   where,
 } from 'firebase/firestore';
 import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
-import imageCompression from 'browser-image-compression';
 
 import { db, storage } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
+import { uploadEvidenceBatch } from '@/services/evidenceUploadService';
 import { Evidencia, Revision } from '@/types/revision';
 
 const COLLECTION = 'revisiones';
 const DEFAULT_PAGE_SIZE = 50;
-const IMAGE_UPLOAD_OPTIONS = {
-  maxSizeMB: 1,
-  maxWidthOrHeight: 1920,
-  useWebWorker: true,
-};
 
 const mapRevision = (docId: string, data: Record<string, unknown>) => ({
   id: docId,
@@ -68,15 +63,27 @@ export interface PaginatedRevisionesResult {
 export async function crearRevision(
   data: Omit<Revision, 'id' | 'creadoEn' | 'actualizadoEn' | 'evidencias'>
 ): Promise<string> {
-  const response = await callCallable<
-    Record<string, unknown>,
-    { id: string }
-  >('createRevisionDraft', {
+  const response = await callCallable<Record<string, unknown>, { id: string }>('createRevisionDraft', {
     ...data,
     fecha: new Date(data.fecha).toISOString(),
   });
 
   return response.id;
+}
+
+export async function subirEvidencias(
+  revisionId: string,
+  archivos: File[]
+): Promise<Evidencia[]> {
+  return uploadEvidenceBatch({
+    documentId: revisionId,
+    documentIdField: 'revisionId',
+    storagePrefix: 'evidencias',
+    registerCallable: 'registerRevisionEvidence',
+    files: archivos,
+    buildNombre: (index) => `Evidencia ${index + 1}`,
+    buildDescripcion: (index) => `Fotografía de revisión ${index + 1}`,
+  });
 }
 
 export async function subirEvidencia(
@@ -85,29 +92,17 @@ export async function subirEvidencia(
   nombre: string,
   descripcion?: string
 ): Promise<Evidencia> {
-  const archivoComprimido = await imageCompression(archivo, IMAGE_UPLOAD_OPTIONS);
-  const nombreArchivo = `${Date.now()}_${archivo.name}`;
-  const storagePath = `evidencias/${revisionId}/${nombreArchivo}`;
-  const storageRef = ref(storage, storagePath);
-
-  await uploadBytes(storageRef, archivoComprimido);
-  const url = await getDownloadURL(storageRef);
-
-  await callCallable<
-    { revisionId: string; evidences: Array<{ id: string; storagePath: string; url: string; nombre: string; descripcion?: string }> },
-    { count: number }
-  >('registerRevisionEvidence', {
-    revisionId,
-    evidences: [{ id: nombreArchivo, storagePath, url, nombre, descripcion }],
+  const evidencias = await uploadEvidenceBatch({
+    documentId: revisionId,
+    documentIdField: 'revisionId',
+    storagePrefix: 'evidencias',
+    registerCallable: 'registerRevisionEvidence',
+    files: [archivo],
+    buildNombre: () => nombre,
+    buildDescripcion: () => descripcion,
   });
 
-  return {
-    id: nombreArchivo,
-    url,
-    nombre,
-    descripcion,
-    subidaEn: new Date(),
-  };
+  return evidencias[0];
 }
 
 export async function firmarComoRevisor(
@@ -122,14 +117,14 @@ export async function firmarComoRevisor(
   await uploadBytes(storageRef, blob, { contentType: 'image/png' });
   const url = await getDownloadURL(storageRef);
 
-  await callCallable<
-    { revisionId: string; storagePath: string; url: string },
-    { ok: boolean }
-  >('registerReviewerSignature', {
-    revisionId,
-    storagePath,
-    url,
-  });
+  await callCallable<{ revisionId: string; storagePath: string; url: string }, { ok: boolean }>(
+    'registerReviewerSignature',
+    {
+      revisionId,
+      storagePath,
+      url,
+    }
+  );
 }
 
 export async function firmarComoCustodio(
@@ -212,10 +207,7 @@ export async function obtenerRevisionesPaginadas({
 }: PaginatedRevisionesOptions = {}): Promise<PaginatedRevisionesResult> {
   const collectionRef = collection(db, COLLECTION);
   const filterConstraints = buildRevisionFilters({ custodioId, onlyPendingCustodian });
-  const pageConstraints: QueryConstraint[] = [
-    ...filterConstraints,
-    orderBy('fecha', 'desc'),
-  ];
+  const pageConstraints: QueryConstraint[] = [...filterConstraints, orderBy('fecha', 'desc')];
 
   if (cursor) {
     pageConstraints.push(startAfter(cursor));
@@ -246,17 +238,13 @@ export async function obtenerEstadisticasRevisiones(): Promise<{
   actasCompletadas: number;
 }> {
   const collectionRef = collection(db, COLLECTION);
-  const [
-    totalSnapshot,
-    pendientesSnapshot,
-    malEstadoSnapshot,
-    completadasSnapshot,
-  ] = await Promise.all([
-    getCountFromServer(query(collectionRef)),
-    getCountFromServer(query(collectionRef, where('estado', '==', 'pendiente_firma_custodio'))),
-    getCountFromServer(query(collectionRef, where('estadoActivo', 'in', ['malo', 'para_baja']))),
-    getCountFromServer(query(collectionRef, where('estado', '==', 'completada'))),
-  ]);
+  const [totalSnapshot, pendientesSnapshot, malEstadoSnapshot, completadasSnapshot] =
+    await Promise.all([
+      getCountFromServer(query(collectionRef)),
+      getCountFromServer(query(collectionRef, where('estado', '==', 'pendiente_firma_custodio'))),
+      getCountFromServer(query(collectionRef, where('estadoActivo', 'in', ['malo', 'para_baja']))),
+      getCountFromServer(query(collectionRef, where('estado', '==', 'completada'))),
+    ]);
 
   return {
     totalRevisiones: totalSnapshot.data().count,
@@ -294,7 +282,9 @@ export async function obtenerTodasPendientesFirma(limitItems?: number): Promise<
 }
 
 export async function contarRevisionesPorEstadoProceso(estado: string): Promise<number> {
-  const snapshot = await getCountFromServer(query(collection(db, COLLECTION), where('estado', '==', estado)));
+  const snapshot = await getCountFromServer(
+    query(collection(db, COLLECTION), where('estado', '==', estado))
+  );
   return snapshot.data().count;
 }
 

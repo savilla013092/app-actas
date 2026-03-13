@@ -449,6 +449,7 @@ export const startAssetImport = functions.region(REGION).https.onCall(async (dat
         modelo: row[COL.MODELO],
         ubicacion,
       }),
+      estadoAsignacionInicial: 'no_requerida',
       creadoEn: serverTimestamp(),
       actualizadoEn: serverTimestamp(),
       creadoPor: actor.uid,

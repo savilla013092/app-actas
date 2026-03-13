@@ -56,6 +56,14 @@ test('smoke: admin crea activo, logistica trabaja revisiones y custodio opera so
       { contentType: 'image/jpeg' }
     )
   );
+  await assertSucceeds(
+    uploadString(
+      ref(logisticaStorage, `asignaciones-evidencias/${ids.assignmentPending}/smoke-logistica.jpg`),
+      'img',
+      'raw',
+      { contentType: 'image/jpeg' }
+    )
+  );
 
   const custodioDb = firestoreContext(testEnv, ids.custodio, authClaims.custodio);
   await assertSucceeds(getDoc(doc(custodioDb, 'activos', ids.activoOwn)));
@@ -65,6 +73,14 @@ test('smoke: admin crea activo, logistica trabaja revisiones y custodio opera so
   await assertSucceeds(
     uploadString(
       ref(custodioStorage, `firmas/${ids.revisionPending}/custodio.png`),
+      'firma',
+      'raw',
+      { contentType: 'image/png' }
+    )
+  );
+  await assertSucceeds(
+    uploadString(
+      ref(custodioStorage, `asignaciones-firmas/${ids.assignmentPending}/custodio.png`),
       'firma',
       'raw',
       { contentType: 'image/png' }

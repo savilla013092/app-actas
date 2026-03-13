@@ -17,6 +17,7 @@ import { Activo, EstadoActivoFisico } from '@/types/activo';
 import { Usuario } from '@/types/usuario';
 import { LucideX } from 'lucide-react';
 import { getAssetClassification } from '@/lib/utils/assetClassification';
+import { resolveInitialAssignmentStatus } from '@/lib/utils/initialAssignment';
 import { getAssetLocation, LOCATION_OPTIONS } from '@/lib/utils/assetLocation';
 
 const activoSchema = z.object({
@@ -37,9 +38,14 @@ const activoSchema = z.object({
 
 type ActivoFormData = z.infer<typeof activoSchema>;
 
+export interface ActivoFormSuccessResult {
+    activoId: string;
+    redirectTo?: string;
+}
+
 interface ActivoFormProps {
     activo?: Activo | null;
-    onSuccess: (activoId: string) => void;
+    onSuccess: (result: ActivoFormSuccessResult) => void;
     onCancel: () => void;
 }
 
@@ -86,6 +92,10 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
     const [loadingCustodios, setLoadingCustodios] = useState(true);
     const [error, setError] = useState<string | null>(null);
     const isEditing = !!activo;
+    const initialAssignmentStatus = useMemo(
+        () => resolveInitialAssignmentStatus(activo),
+        [activo]
+    );
 
     const currentLocation = useMemo(
         () => getAssetLocation(activo?.ubicacion),
@@ -191,8 +201,19 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
 
         try {
             const custodioSeleccionado = data.custodioId ? custodios.find(c => c.id === data.custodioId) : null;
+            const hasCustodioNow = Boolean(data.custodioId);
+            const shouldKeepCompletedAssignment = isEditing && initialAssignmentStatus === 'completada';
+            const nextInitialAssignmentStatus: Activo['estadoAsignacionInicial'] = shouldKeepCompletedAssignment
+                ? 'completada'
+                : hasCustodioNow
+                    ? 'pendiente'
+                    : 'no_requerida';
+            const shouldRedirectToInitialAssignment = hasCustodioNow && (
+                !isEditing ||
+                (!activo?.custodioId && initialAssignmentStatus !== 'completada')
+            );
 
-            const activoData = {
+            const activoData: Omit<Activo, 'id' | 'creadoEn' | 'actualizadoEn'> = {
                 codigo: data.codigo,
                 descripcion: data.descripcion,
                 categoria: getAssetClassification(data.codigo, data.categoria).classificationName,
@@ -207,15 +228,24 @@ export function ActivoForm({ activo, onSuccess, onCancel }: ActivoFormProps) {
                 valorAdquisicion: data.valorAdquisicion ? parseFloat(data.valorAdquisicion) : undefined,
                 fechaAdquisicion: data.fechaAdquisicion ? new Date(data.fechaAdquisicion) : undefined,
                 observaciones: data.observaciones || undefined,
+                estadoAsignacionInicial: nextInitialAssignmentStatus,
+                asignacionInicialId: shouldKeepCompletedAssignment ? activo?.asignacionInicialId : undefined,
+                asignacionInicialCompletadaEn: shouldKeepCompletedAssignment ? activo?.asignacionInicialCompletadaEn : undefined,
                 creadoPor: user.uid,
             };
 
             if (isEditing && activo) {
                 await actualizarActivo(activo.id, activoData);
-                onSuccess(activo.id);
+                onSuccess({
+                    activoId: activo.id,
+                    redirectTo: shouldRedirectToInitialAssignment ? `/asignaciones/nueva/${activo.id}` : undefined,
+                });
             } else {
                 const activoId = await crearActivo(activoData);
-                onSuccess(activoId);
+                onSuccess({
+                    activoId,
+                    redirectTo: shouldRedirectToInitialAssignment ? `/asignaciones/nueva/${activoId}` : undefined,
+                });
             }
         } catch (err: unknown) {
             console.error('Error al guardar activo:', err);

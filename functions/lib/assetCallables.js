@@ -357,6 +357,7 @@ exports.startAssetImport = functions.region(security_1.REGION).https.onCall(asyn
                 modelo: row[COL.MODELO],
                 ubicacion,
             }),
+            estadoAsignacionInicial: 'no_requerida',
             creadoEn: (0, security_1.serverTimestamp)(),
             actualizadoEn: (0, security_1.serverTimestamp)(),
             creadoPor: actor.uid,

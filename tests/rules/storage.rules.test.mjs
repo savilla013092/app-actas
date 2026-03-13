@@ -40,6 +40,10 @@ test('evidencias: solo admin/logistica pueden subir imagenes a revisiones abiert
   await assertFails(
     uploadFile(custodioStorage, `evidencias/${ids.revisionDraft}/foto-custodio.jpg`)
   );
+
+  await assertFails(
+    uploadFile(logisticaStorage, `evidencias/${ids.revisionDraft}/foto-heic.heic`, 'image/heic')
+  );
 });
 
 test('firmas: revisor solo firma en borrador y custodio titular solo firma su revision pendiente', async () => {
@@ -59,6 +63,29 @@ test('firmas: revisor solo firma en borrador y custodio titular solo firma su re
   );
   await assertFails(
     uploadFile(otherCustodioStorage, `firmas/${ids.revisionPending}/custodio.png`, 'image/png', 'firma-custodio')
+  );
+});
+
+test('asignaciones iniciales: solo admin/logistica suben evidencias y solo el custodio titular firma', async () => {
+  const logisticaStorage = storageContext(testEnv, ids.logistica, authClaims.logistica);
+  const custodioStorage = storageContext(testEnv, ids.custodio, authClaims.custodio);
+  const otherCustodioStorage = storageContext(testEnv, ids.otherCustodio, authClaims.custodio);
+
+  await assertSucceeds(
+    uploadFile(logisticaStorage, `asignaciones-evidencias/${ids.assignmentPending}/foto.jpg`)
+  );
+  await assertFails(
+    uploadFile(custodioStorage, `asignaciones-evidencias/${ids.assignmentPending}/foto-custodio.jpg`)
+  );
+  await assertFails(
+    uploadFile(logisticaStorage, `asignaciones-evidencias/${ids.assignmentPending}/foto.heic`, 'image/heic')
+  );
+
+  await assertSucceeds(
+    uploadFile(custodioStorage, `asignaciones-firmas/${ids.assignmentPending}/custodio.png`, 'image/png', 'firma-custodio')
+  );
+  await assertFails(
+    uploadFile(otherCustodioStorage, `asignaciones-firmas/${ids.assignmentPending}/custodio.png`, 'image/png', 'firma-custodio')
   );
 });
 

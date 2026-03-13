@@ -11,6 +11,7 @@ interface EvidenciasUploaderProps {
   evidencias: File[];
   onChange: (files: File[]) => void;
   maxFiles: number;
+  accept?: string;
 }
 
 function PreviewImage({ file, index }: { file: File; index: number }) {
@@ -37,7 +38,12 @@ function PreviewImage({ file, index }: { file: File; index: number }) {
   );
 }
 
-export function EvidenciasUploader({ evidencias, onChange, maxFiles }: EvidenciasUploaderProps) {
+export function EvidenciasUploader({
+  evidencias,
+  onChange,
+  maxFiles,
+  accept = 'image/*',
+}: EvidenciasUploaderProps) {
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     if (!event.target.files) {
       return;
@@ -87,7 +93,7 @@ export function EvidenciasUploader({ evidencias, onChange, maxFiles }: Evidencia
             <span className='text-sm text-muted-foreground'>Subir foto</span>
             <input
               type='file'
-              accept='image/*'
+              accept={accept}
               className='hidden'
               onChange={handleFileChange}
               multiple

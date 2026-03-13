@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import Link from 'next/link';
 import { useParams, useRouter } from 'next/navigation';
 import { useAuth } from '@/hooks/useAuth';
 import { obtenerActivo } from '@/services/activoService';
@@ -12,6 +13,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { Card } from '@/components/ui/card';
 import { PageHeader } from '@/components/layout/PageHeader';
 import { LucideBox, LucideClipboardCheck } from 'lucide-react';
+import { resolveInitialAssignmentStatus } from '@/lib/utils/initialAssignment';
 
 export default function NuevaRevisionPage() {
     const { activoId } = useParams();
@@ -75,6 +77,7 @@ export default function NuevaRevisionPage() {
         cedula: custodio?.cedula || 'No especificada',
         cargo: custodio?.cargo || 'Custodio asignado'
     };
+    const initialAssignmentStatus = resolveInitialAssignmentStatus(activo);
 
     const breadcrumbItems = [
         { label: 'Activos', href: '/activos', icon: <LucideBox size={14} /> },
@@ -91,13 +94,35 @@ export default function NuevaRevisionPage() {
                 backHref={`/activos/${activo.id}`}
             />
 
-            <Card className="p-6 md:p-8 shadow-elegant border-border/50">
-                <RevisionForm
-                    activo={activo}
-                    custodio={custodioData}
-                    onSuccess={handleSuccess}
-                />
-            </Card>
+            {!activo.custodioId ? (
+                <Card className="p-6 md:p-8 shadow-elegant border-border/50">
+                    <p className="text-sm text-muted-foreground">
+                        El activo no tiene custodio asignado. Debe asignar primero un custodio responsable antes de registrar revisiones.
+                    </p>
+                </Card>
+            ) : initialAssignmentStatus !== 'completada' ? (
+                <Card className="space-y-4 p-6 md:p-8 shadow-elegant border-border/50">
+                    <p className="text-sm text-muted-foreground">
+                        La asignación inicial del activo debe completarse antes de habilitar nuevas revisiones periódicas.
+                    </p>
+                    <div>
+                        <Link
+                            href={`/asignaciones/nueva/${activo.id}`}
+                            className="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground"
+                        >
+                            Ir a asignación inicial
+                        </Link>
+                    </div>
+                </Card>
+            ) : (
+                <Card className="p-6 md:p-8 shadow-elegant border-border/50">
+                    <RevisionForm
+                        activo={activo}
+                        custodio={custodioData}
+                        onSuccess={handleSuccess}
+                    />
+                </Card>
+            )}
         </div>
     );
 }

@@ -121,7 +121,7 @@ export default function NuevoActivoPage() {
             />
 
             <ActivoForm
-                onSuccess={(activoId) => router.push(`/activos/${activoId}`)}
+                onSuccess={({ activoId, redirectTo }) => router.push(redirectTo || `/activos/${activoId}`)}
                 onCancel={() => router.push('/activos')}
             />
         </div>

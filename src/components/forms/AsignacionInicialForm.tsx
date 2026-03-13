@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useState } from 'react';
 import { useForm } from 'react-hook-form';
@@ -10,28 +10,29 @@ import { SignaturePad } from '@/components/signature/SignaturePad';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
-import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/useAuth';
-import { getAssetLocation } from '@/lib/utils/assetLocation';
 import {
   EVIDENCE_FILE_ACCEPT,
   getEvidenceUploadErrorDescription,
 } from '@/services/evidenceUploadService';
-import { crearRevision, firmarComoRevisor, subirEvidencias } from '@/services/revisionService';
+import {
+  crearAsignacionInicial,
+  firmarAsignacionComoRevisor,
+  subirEvidenciasAsignacion,
+} from '@/services/asignacionService';
 import { Activo } from '@/types/activo';
 
-const revisionSchema = z.object({
+const asignacionSchema = z.object({
   fecha: z.string().min(1, 'La fecha es requerida'),
-  estadoActivo: z.enum(['excelente', 'bueno', 'regular', 'malo', 'para_baja']),
   descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres'),
   observaciones: z.string().optional(),
 });
 
-type RevisionFormData = z.infer<typeof revisionSchema>;
+type AsignacionFormData = z.infer<typeof asignacionSchema>;
 
-interface RevisionFormProps {
+interface AsignacionInicialFormProps {
   activo: Activo;
   custodio: {
     id: string;
@@ -39,35 +40,37 @@ interface RevisionFormProps {
     cedula: string;
     cargo: string;
   };
-  onSuccess: (revisionId: string) => void;
+  onSuccess: (assignmentId: string) => void;
 }
 
-export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps) {
+export function AsignacionInicialForm({
+  activo,
+  custodio,
+  onSuccess,
+}: AsignacionInicialFormProps) {
   const { user } = useAuth();
   const [paso, setPaso] = useState<'formulario' | 'evidencias' | 'firma'>('formulario');
-  const [revisionId, setRevisionId] = useState<string | null>(null);
+  const [assignmentId, setAssignmentId] = useState<string | null>(null);
   const [evidencias, setEvidencias] = useState<File[]>([]);
   const [loading, setLoading] = useState(false);
-  const assetLocation = getAssetLocation(activo.ubicacion);
 
   const {
     register,
     handleSubmit,
     getValues,
     formState: { errors },
-  } = useForm<RevisionFormData>({
-    resolver: zodResolver(revisionSchema),
+  } = useForm<AsignacionFormData>({
+    resolver: zodResolver(asignacionSchema),
     defaultValues: {
       fecha: new Date().toISOString().split('T')[0],
-      estadoActivo: 'bueno',
     },
   });
 
-  const onSubmitFormulario = async (data: RevisionFormData) => {
+  const onSubmitFormulario = async (data: AsignacionFormData) => {
     if (!user?.usuario) {
       toast({
         title: 'Perfil no disponible',
-        description: 'Debe iniciar sesión con un perfil operativo válido para crear revisiones.',
+        description: 'Debe iniciar sesión con un perfil operativo válido para crear asignaciones iniciales.',
         variant: 'destructive',
       });
       return;
@@ -76,11 +79,11 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
     setLoading(true);
 
     try {
-      const id = await crearRevision({
+      const id = await crearAsignacionInicial({
         activoId: activo.id,
         codigoActivo: activo.codigo,
         descripcionActivo: activo.descripcion,
-        ubicacionActivo: assetLocation.locationName,
+        ubicacionActivo: activo.ubicacion,
         custodioId: custodio.id,
         custodioNombre: custodio.nombre,
         custodioCedula: custodio.cedula,
@@ -90,20 +93,19 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
         revisorCedula: user.usuario.cedula,
         revisorCargo: user.usuario.cargo,
         fecha: new Date(data.fecha),
-        estadoActivo: data.estadoActivo,
         descripcion: data.descripcion,
         observaciones: data.observaciones,
         estado: 'borrador',
         creadoPor: user.uid,
       });
 
-      setRevisionId(id);
+      setAssignmentId(id);
       setPaso('evidencias');
     } catch (error) {
-      console.error('Error creating revision:', error);
+      console.error('Error creating initial assignment:', error);
       toast({
-        title: 'No fue posible crear la revisión',
-        description: 'Revise sus permisos e intente nuevamente.',
+        title: 'No fue posible crear la asignación inicial',
+        description: error instanceof Error ? error.message : 'Revise el estado del activo e intente nuevamente.',
         variant: 'destructive',
       });
     } finally {
@@ -112,17 +114,17 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
   };
 
   const handleSubirEvidencias = async () => {
-    if (!revisionId) {
+    if (!assignmentId) {
       return;
     }
 
     setLoading(true);
 
     try {
-      await subirEvidencias(revisionId, evidencias);
+      await subirEvidenciasAsignacion(assignmentId, evidencias);
       setPaso('firma');
     } catch (error) {
-      console.error('Error uploading evidences:', error);
+      console.error('Error uploading assignment evidences:', error);
       toast({
         title: 'Error al subir evidencias',
         description: getEvidenceUploadErrorDescription(error),
@@ -134,14 +136,14 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
   };
 
   const handleFirmaRevisor = async (firmaDataUrl: string) => {
-    if (!revisionId) {
+    if (!assignmentId) {
       return;
     }
 
     setLoading(true);
 
     try {
-      const datosRevision = {
+      const datosAsignacion = {
         ...getValues(),
         activo,
         custodio,
@@ -149,13 +151,13 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
         fecha: new Date().toISOString(),
       };
 
-      await firmarComoRevisor(revisionId, firmaDataUrl, datosRevision);
-      onSuccess(revisionId);
+      await firmarAsignacionComoRevisor(assignmentId, firmaDataUrl, datosAsignacion);
+      onSuccess(assignmentId);
     } catch (error) {
-      console.error('Error registering reviewer signature:', error);
+      console.error('Error registering assignment reviewer signature:', error);
       toast({
         title: 'No fue posible registrar la firma',
-        description: 'La revisión quedó guardada, pero la firma del revisor no se pudo procesar.',
+        description: 'La asignación quedó guardada, pero la firma del revisor no se pudo procesar.',
         variant: 'destructive',
       });
     } finally {
@@ -190,7 +192,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
       {paso === 'formulario' && (
         <form onSubmit={handleSubmit(onSubmitFormulario)} className='space-y-6'>
           <div className='mb-6 rounded-lg border border-border bg-muted p-4'>
-            <h3 className='mb-2 font-semibold'>Activo a revisar</h3>
+            <h3 className='mb-2 font-semibold'>Activo a asignar</h3>
             <p>
               <strong>Código:</strong> {activo.codigo}
             </p>
@@ -198,7 +200,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
               <strong>Descripción:</strong> {activo.descripcion}
             </p>
             <p>
-              <strong>Ubicación:</strong> {assetLocation.locationName}
+              <strong>Ubicación:</strong> {activo.ubicacion}
             </p>
             <p>
               <strong>Custodio:</strong> {custodio.nombre}
@@ -206,28 +208,17 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
           </div>
 
           <div>
-            <Label htmlFor='fecha'>Fecha de revisión</Label>
+            <Label htmlFor='fecha'>Fecha de asignación</Label>
             <Input type='date' {...register('fecha')} />
             {errors.fecha && <p className='text-sm text-red-500'>{errors.fecha.message}</p>}
           </div>
 
           <div>
-            <Label htmlFor='estadoActivo'>Estado del activo</Label>
-            <Select {...register('estadoActivo')}>
-              <option value='excelente'>Excelente</option>
-              <option value='bueno'>Bueno</option>
-              <option value='regular'>Regular</option>
-              <option value='malo'>Malo</option>
-              <option value='para_baja'>Para baja</option>
-            </Select>
-          </div>
-
-          <div>
-            <Label htmlFor='descripcion'>Descripción de la revisión</Label>
+            <Label htmlFor='descripcion'>Descripción de entrega y recibo</Label>
             <Textarea
               {...register('descripcion')}
               rows={4}
-              placeholder='Describa detalladamente el estado del activo y los hallazgos de la revisión.'
+              placeholder='Describa el estado de entrega del activo y las condiciones del recibo inicial.'
             />
             {errors.descripcion && <p className='text-sm text-red-500'>{errors.descripcion.message}</p>}
           </div>
@@ -237,7 +228,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
             <Textarea
               {...register('observaciones')}
               rows={3}
-              placeholder='Observaciones o recomendaciones adicionales.'
+              placeholder='Observaciones o condiciones especiales de la asignación.'
             />
           </div>
 
@@ -252,7 +243,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
           <div>
             <h3 className='text-lg font-semibold'>Subir evidencias fotográficas</h3>
             <p className='text-muted-foreground'>
-              Agregue entre 1 y 5 fotografías del activo revisado.
+              Agregue entre 1 y 5 fotografías del activo en su momento de entrega inicial.
             </p>
           </div>
 
@@ -283,7 +274,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
           titulo='Firma del profesional de logística'
           nombreFirmante={user.usuario.nombre}
           cedulaFirmante={user.usuario.cedula}
-          declaracion='Certifico que realicé la revisión física del activo y que la información registrada corresponde a su estado real al momento de la inspección.'
+          declaracion='Certifico que realicé la entrega inicial del activo y que la información registrada corresponde al estado en que fue entregado.'
           onSave={handleFirmaRevisor}
           onCancel={() => setPaso('evidencias')}
         />

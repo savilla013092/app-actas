@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onUsuarioWriteSyncClaims = exports.onRevisionFirmadaCompleta = exports.onDocumentoModificado = exports.onActivoWriteSyncSearch = exports.startAssetImport = exports.searchActiveAssets = exports.markExpressLoanReturned = exports.createExpressLoan = exports.registerRevisionEvidence = exports.registerReviewerSignature = exports.registerCustodianSignature = exports.createRevisionDraft = exports.refreshSessionClaims = exports.adminUpdateUser = exports.adminSetUserActive = exports.adminResetPassword = exports.adminCreateUser = void 0;
+exports.onUsuarioWriteSyncClaims = exports.onRevisionFirmadaCompleta = exports.onDocumentoModificado = exports.onAsignacionFirmadaCompleta = exports.onActivoWriteSyncSearch = exports.startAssetImport = exports.searchActiveAssets = exports.markExpressLoanReturned = exports.createExpressLoan = exports.registerRevisionEvidence = exports.registerReviewerSignature = exports.registerCustodianSignature = exports.createRevisionDraft = exports.registerInitialAssignmentReviewerSignature = exports.registerInitialAssignmentEvidence = exports.registerInitialAssignmentCustodianSignature = exports.createInitialAssignmentDraft = exports.refreshSessionClaims = exports.adminUpdateUser = exports.adminSetUserActive = exports.adminResetPassword = exports.adminCreateUser = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 var userCallables_1 = require("./userCallables");
@@ -42,6 +42,11 @@ Object.defineProperty(exports, "adminResetPassword", { enumerable: true, get: fu
 Object.defineProperty(exports, "adminSetUserActive", { enumerable: true, get: function () { return userCallables_1.adminSetUserActive; } });
 Object.defineProperty(exports, "adminUpdateUser", { enumerable: true, get: function () { return userCallables_1.adminUpdateUser; } });
 Object.defineProperty(exports, "refreshSessionClaims", { enumerable: true, get: function () { return userCallables_1.refreshSessionClaims; } });
+var assignmentCallables_1 = require("./assignmentCallables");
+Object.defineProperty(exports, "createInitialAssignmentDraft", { enumerable: true, get: function () { return assignmentCallables_1.createInitialAssignmentDraft; } });
+Object.defineProperty(exports, "registerInitialAssignmentCustodianSignature", { enumerable: true, get: function () { return assignmentCallables_1.registerInitialAssignmentCustodianSignature; } });
+Object.defineProperty(exports, "registerInitialAssignmentEvidence", { enumerable: true, get: function () { return assignmentCallables_1.registerInitialAssignmentEvidence; } });
+Object.defineProperty(exports, "registerInitialAssignmentReviewerSignature", { enumerable: true, get: function () { return assignmentCallables_1.registerInitialAssignmentReviewerSignature; } });
 var revisionCallables_1 = require("./revisionCallables");
 Object.defineProperty(exports, "createRevisionDraft", { enumerable: true, get: function () { return revisionCallables_1.createRevisionDraft; } });
 Object.defineProperty(exports, "registerCustodianSignature", { enumerable: true, get: function () { return revisionCallables_1.registerCustodianSignature; } });
@@ -54,6 +59,7 @@ Object.defineProperty(exports, "searchActiveAssets", { enumerable: true, get: fu
 Object.defineProperty(exports, "startAssetImport", { enumerable: true, get: function () { return assetCallables_1.startAssetImport; } });
 var triggers_1 = require("./triggers");
 Object.defineProperty(exports, "onActivoWriteSyncSearch", { enumerable: true, get: function () { return triggers_1.onActivoWriteSyncSearch; } });
+Object.defineProperty(exports, "onAsignacionFirmadaCompleta", { enumerable: true, get: function () { return triggers_1.onAsignacionFirmadaCompleta; } });
 Object.defineProperty(exports, "onDocumentoModificado", { enumerable: true, get: function () { return triggers_1.onDocumentoModificado; } });
 Object.defineProperty(exports, "onRevisionFirmadaCompleta", { enumerable: true, get: function () { return triggers_1.onRevisionFirmadaCompleta; } });
 Object.defineProperty(exports, "onUsuarioWriteSyncClaims", { enumerable: true, get: function () { return triggers_1.onUsuarioWriteSyncClaims; } });

@@ -14,12 +14,14 @@ export const VALID_ROLES = new Set(['admin', 'logistica', 'custodio']);
 
 export type Role = 'admin' | 'logistica' | 'custodio';
 
-export type RevisionState =
+export type ActaWorkflowState =
   | 'borrador'
   | 'pendiente_firma_custodio'
   | 'firmada_completa'
   | 'completada'
   | 'anulada';
+
+export type RevisionState = ActaWorkflowState;
 
 export interface ManagedUserProfile {
   email: string;

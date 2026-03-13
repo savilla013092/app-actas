@@ -106,6 +106,21 @@ test('revisiones: logistica puede leer todas y custodio solo la suya; las escrit
   );
 });
 
+test('asignaciones: logistica puede leer todas y custodio solo la suya; las escrituras directas estan bloqueadas', async () => {
+  const logisticaDb = firestoreContext(testEnv, ids.logistica, authClaims.logistica);
+  const assignment = await assertSucceeds(getDoc(doc(logisticaDb, 'asignaciones', ids.assignmentOtherPending)));
+  assert.equal(assignment.data()?.custodioId, ids.otherCustodio);
+
+  const custodioDb = firestoreContext(testEnv, ids.custodio, authClaims.custodio);
+  await assertSucceeds(getDoc(doc(custodioDb, 'asignaciones', ids.assignmentPending)));
+  await assertFails(getDoc(doc(custodioDb, 'asignaciones', ids.assignmentOtherPending)));
+  await assertFails(
+    updateDoc(doc(custodioDb, 'asignaciones', ids.assignmentPending), {
+      estado: 'completada',
+    })
+  );
+});
+
 test('express loans, auditoria y consecutivos quedan fuera de escritura cliente', async () => {
   const adminDb = firestoreContext(testEnv, ids.admin, authClaims.admin);
   const logisticaDb = firestoreContext(testEnv, ids.logistica, authClaims.logistica);

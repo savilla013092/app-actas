@@ -63,6 +63,7 @@ const pageTitles: Record<string, string> = {
   '/admin/importar': 'Importar datos',
   '/express-loans': 'Préstamo express',
   '/express-loans/new': 'Nuevo préstamo express',
+  '/asignaciones': 'Asignaciones iniciales',
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
@@ -77,7 +78,9 @@ export default function DashboardLayout({ children }: { children: React.ReactNod
   };
 
   const filteredNavItems = navItems.filter((item) => !item.roles || (role ? item.roles.includes(role) : false));
-  const currentPageTitle = pageTitles[pathname] || 'Sistema de Actas';
+  const currentPageTitle = pathname.startsWith('/asignaciones')
+    ? pageTitles['/asignaciones']
+    : pageTitles[pathname] || 'Sistema de Actas';
 
   const isActiveRoute = (href: string) => {
     if (href === '/dashboard') return pathname === '/dashboard';
