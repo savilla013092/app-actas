@@ -139,7 +139,7 @@ export const createExpressLoan = async (
     const response = await callCallable<
       CreateExpressLoanDTO & {
         loanId: string;
-        evidences: Array<{ id: string; storagePath: string; url: string; nombre: string }>;
+        evidences: Array<{ id: string; storagePath: string; nombre: string }>;
       },
       { id: string }
     >('createExpressLoan', {
@@ -148,7 +148,6 @@ export const createExpressLoan = async (
       evidences: uploadedFiles.map((file) => ({
         id: file.id,
         storagePath: file.storagePath,
-        url: file.url,
         nombre: file.nombre,
       })),
     });

@@ -49,7 +49,7 @@ export interface AuditLogPayload {
 export interface UploadedFilePayload {
   id: string;
   storagePath: string;
-  url: string;
+  url?: string;
   nombre: string;
   descripcion?: string;
 }
@@ -205,6 +205,34 @@ export function ensureStoragePath(storagePath: string, expectedPrefix: string): 
   }
 }
 
+export function resolveStoredFilePath(
+  file: { storagePath?: string; url?: string } | undefined,
+  bucketName: string
+): string {
+  if (file?.storagePath) {
+    return file.storagePath;
+  }
+
+  const url = file?.url;
+  if (!url) {
+    throw new Error('STORAGE_PATH_REQUIRED');
+  }
+
+  if (url.includes('firebasestorage.googleapis.com')) {
+    const match = url.match(/\/o\/([^?]+)/);
+    if (match) {
+      return decodeURIComponent(match[1]);
+    }
+  }
+
+  if (url.includes('storage.googleapis.com')) {
+    const withoutBucket = url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+    return decodeURIComponent(withoutBucket.split('?')[0]);
+  }
+
+  return decodeURIComponent(url.split('?')[0]);
+}
+
 export function getClientMetadata(context: functions.https.CallableContext) {
   const request = context.rawRequest;
   const forwardedFor = request.headers['x-forwarded-for'];
@@ -236,7 +264,7 @@ export function toIsoDateString(value?: string): string {
 export function mapUploadedEvidence(files: UploadedFilePayload[]) {
   return files.map((file) => ({
     id: file.id,
-    url: file.url,
+    ...(file.url ? { url: file.url } : {}),
     nombre: file.nombre,
     descripcion: file.descripcion,
     storagePath: file.storagePath,

@@ -1,4 +1,4 @@
-import { deleteObject, getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { deleteObject, ref, uploadBytes } from 'firebase/storage';
 import imageCompression from 'browser-image-compression';
 
 import { storage } from '@/lib/firebase/config';
@@ -54,7 +54,7 @@ interface NormalizedEvidenceFile {
 export interface UploadedEvidenceFile {
   id: string;
   storagePath: string;
-  url: string;
+  url?: string;
   nombre: string;
   descripcion?: string;
   contentType: SupportedImageType;
@@ -260,20 +260,9 @@ export async function uploadFilesToStorage({
 
       uploadedStoragePaths.push(storagePath);
 
-      let url: string;
-      try {
-        url = await getDownloadURL(storageRef);
-      } catch (error) {
-        throw classifyStorageError(
-          error,
-          'La evidencia se subio, pero no fue posible obtener su URL de descarga.'
-        );
-      }
-
       uploadedFiles.push({
         id: fileName,
         storagePath,
-        url,
         nombre: buildNombre(index, normalizedFile.file),
         descripcion: buildDescripcion?.(index, normalizedFile.file),
         contentType: normalizedFile.contentType,
@@ -310,7 +299,6 @@ export async function uploadEvidenceBatch({
       evidences: uploadedFiles.map((file) => ({
         id: file.id,
         storagePath: file.storagePath,
-        url: file.url,
         nombre: file.nombre,
         descripcion: file.descripcion,
       })),
@@ -326,7 +314,6 @@ export async function uploadEvidenceBatch({
 
   return uploadedFiles.map((file) => ({
     id: file.id,
-    url: file.url,
     nombre: file.nombre,
     descripcion: file.descripcion,
     storagePath: file.storagePath,

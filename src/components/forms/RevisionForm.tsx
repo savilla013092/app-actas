@@ -1,8 +1,10 @@
-﻿'use client';
+'use client';
 
-import { useState } from 'react';
+import Image from 'next/image';
+import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
+import { LucideImageOff, LucideTrash2 } from 'lucide-react';
 import { z } from 'zod';
 
 import { EvidenciasUploader } from '@/components/revision/EvidenciasUploader';
@@ -19,49 +21,194 @@ import {
   EVIDENCE_FILE_ACCEPT,
   getEvidenceUploadErrorDescription,
 } from '@/services/evidenceUploadService';
-import { crearRevision, firmarComoRevisor, subirEvidencias } from '@/services/revisionService';
+import {
+  actualizarBorradorRevision,
+  crearRevision,
+  eliminarEvidenciaBorradorRevision,
+  firmarComoRevisor,
+  subirEvidencias,
+  type UpdateRevisionDraftPayload,
+} from '@/services/revisionService';
 import { Activo } from '@/types/activo';
+import { Evidencia, Revision } from '@/types/revision';
+import { Usuario } from '@/types/usuario';
 
 const revisionSchema = z.object({
   fecha: z.string().min(1, 'La fecha es requerida'),
   estadoActivo: z.enum(['excelente', 'bueno', 'regular', 'malo', 'para_baja']),
   descripcion: z.string().min(10, 'La descripción debe tener al menos 10 caracteres'),
   observaciones: z.string().optional(),
+  custodioId: z.string().min(1, 'Debe seleccionar un custodio'),
 });
 
 type RevisionFormData = z.infer<typeof revisionSchema>;
 
-interface RevisionFormProps {
-  activo: Activo;
-  custodio: {
-    id: string;
-    nombre: string;
-    cedula: string;
-    cargo: string;
-  };
-  onSuccess: (revisionId: string) => void;
+interface CustodioSnapshot {
+  id: string;
+  nombre: string;
+  cedula: string;
+  cargo: string;
 }
 
-export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps) {
+interface RevisionFormProps {
+  activo: Activo;
+  custodio: CustodioSnapshot;
+  onSuccess: (revisionId: string) => void;
+  revision?: Revision | null;
+  custodios?: Usuario[];
+}
+
+function formatDateInput(
+  value?: Date | { seconds: number } | { toDate: () => Date } | null
+): string {
+  if (!value) {
+    return new Date().toISOString().split('T')[0];
+  }
+
+  if (typeof value === 'object' && 'toDate' in value) {
+    return value.toDate().toISOString().split('T')[0];
+  }
+
+  if (typeof value === 'object' && 'seconds' in value) {
+    return new Date(value.seconds * 1000).toISOString().split('T')[0];
+  }
+
+  return new Date(value).toISOString().split('T')[0];
+}
+
+function ExistingEvidenceCard({
+  evidencia,
+  deleting,
+  onDelete,
+}: {
+  evidencia: Evidencia;
+  deleting: boolean;
+  onDelete: () => void;
+}) {
+  return (
+    <div className='group relative aspect-square overflow-hidden rounded-lg border border-border bg-muted'>
+      {evidencia.url ? (
+        <Image src={evidencia.url} alt={evidencia.nombre} fill className='object-cover' unoptimized />
+      ) : (
+        <div className='flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground'>
+          <LucideImageOff size={28} />
+          <span className='px-3 text-center text-xs'>Vista previa no disponible</span>
+        </div>
+      )}
+
+      <div className='absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/80 to-transparent px-3 py-2 text-[11px] text-white'>
+        <p className='truncate' title={evidencia.nombre}>
+          {evidencia.nombre}
+        </p>
+      </div>
+
+      <button
+        type='button'
+        onClick={onDelete}
+        disabled={deleting}
+        className='absolute right-2 top-2 rounded-full bg-red-600 p-1 text-white opacity-0 transition-opacity group-hover:opacity-100 disabled:cursor-not-allowed disabled:opacity-100'
+        aria-label={`Eliminar ${evidencia.nombre}`}
+      >
+        <LucideTrash2 size={16} />
+      </button>
+    </div>
+  );
+}
+
+export function RevisionForm({
+  activo,
+  custodio,
+  onSuccess,
+  revision = null,
+  custodios = [],
+}: RevisionFormProps) {
   const { user } = useAuth();
+  const isEditMode = revision !== null;
+  const initialCustodio = useMemo<CustodioSnapshot>(
+    () =>
+      revision
+        ? {
+            id: revision.custodioId,
+            nombre: revision.custodioNombre,
+            cedula: revision.custodioCedula,
+            cargo: revision.custodioCargo,
+          }
+        : custodio,
+    [custodio, revision]
+  );
+
   const [paso, setPaso] = useState<'formulario' | 'evidencias' | 'firma'>('formulario');
-  const [revisionId, setRevisionId] = useState<string | null>(null);
+  const [revisionId, setRevisionId] = useState<string | null>(revision?.id ?? null);
   const [evidencias, setEvidencias] = useState<File[]>([]);
+  const [evidenciasExistentes, setEvidenciasExistentes] = useState<Evidencia[]>(revision?.evidencias ?? []);
   const [loading, setLoading] = useState(false);
+  const [deletingEvidenceId, setDeletingEvidenceId] = useState<string | null>(null);
   const assetLocation = getAssetLocation(activo.ubicacion);
+
+  const custodioOptions = useMemo(() => {
+    const options = new Map<string, CustodioSnapshot>();
+
+    options.set(initialCustodio.id, initialCustodio);
+
+    custodios
+      .filter((usuario) => usuario.rol === 'custodio' && usuario.activo)
+      .forEach((usuario) => {
+        options.set(usuario.id, {
+          id: usuario.id,
+          nombre: usuario.nombre,
+          cedula: usuario.cedula,
+          cargo: usuario.cargo,
+        });
+      });
+
+    return Array.from(options.values()).sort((left, right) => left.nombre.localeCompare(right.nombre));
+  }, [custodios, initialCustodio]);
 
   const {
     register,
     handleSubmit,
     getValues,
+    watch,
     formState: { errors },
   } = useForm<RevisionFormData>({
     resolver: zodResolver(revisionSchema),
     defaultValues: {
-      fecha: new Date().toISOString().split('T')[0],
-      estadoActivo: 'bueno',
+      fecha: formatDateInput(revision?.fecha ?? null),
+      estadoActivo: revision?.estadoActivo ?? 'bueno',
+      descripcion: revision?.descripcion ?? '',
+      observaciones: revision?.observaciones ?? '',
+      custodioId: initialCustodio.id,
     },
   });
+
+  const selectedCustodioId = watch('custodioId');
+  const selectedCustodio =
+    custodioOptions.find((item) => item.id === selectedCustodioId) ?? initialCustodio;
+  const totalEvidenceCount = evidenciasExistentes.length + evidencias.length;
+
+  const buildDraftPayload = (data: RevisionFormData): UpdateRevisionDraftPayload | null => {
+    const custodioSeleccionado =
+      custodioOptions.find((item) => item.id === data.custodioId) ?? initialCustodio;
+
+    if (!custodioSeleccionado) {
+      return null;
+    }
+
+    return {
+      activoId: activo.id,
+      codigoActivo: activo.codigo,
+      descripcionActivo: activo.descripcion,
+      ubicacionActivo: assetLocation.locationName,
+      custodioId: custodioSeleccionado.id,
+      custodioNombre: custodioSeleccionado.nombre,
+      custodioCedula: custodioSeleccionado.cedula,
+      custodioCargo: custodioSeleccionado.cargo,
+      fecha: new Date(data.fecha),
+      estadoActivo: data.estadoActivo,
+      descripcion: data.descripcion,
+      observaciones: data.observaciones,
+    };
+  };
 
   const onSubmitFormulario = async (data: RevisionFormData) => {
     if (!user?.usuario) {
@@ -73,36 +220,40 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
       return;
     }
 
+    const payload = buildDraftPayload(data);
+    if (!payload) {
+      toast({
+        title: 'Custodio no disponible',
+        description: 'Seleccione un custodio válido para continuar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
     setLoading(true);
 
     try {
-      const id = await crearRevision({
-        activoId: activo.id,
-        codigoActivo: activo.codigo,
-        descripcionActivo: activo.descripcion,
-        ubicacionActivo: assetLocation.locationName,
-        custodioId: custodio.id,
-        custodioNombre: custodio.nombre,
-        custodioCedula: custodio.cedula,
-        custodioCargo: custodio.cargo,
-        revisorId: user.uid,
-        revisorNombre: user.usuario.nombre,
-        revisorCedula: user.usuario.cedula,
-        revisorCargo: user.usuario.cargo,
-        fecha: new Date(data.fecha),
-        estadoActivo: data.estadoActivo,
-        descripcion: data.descripcion,
-        observaciones: data.observaciones,
-        estado: 'borrador',
-        creadoPor: user.uid,
-      });
+      if (isEditMode && revisionId) {
+        await actualizarBorradorRevision(revisionId, payload);
+      } else {
+        const id = await crearRevision({
+          ...payload,
+          revisorId: user.uid,
+          revisorNombre: user.usuario.nombre,
+          revisorCedula: user.usuario.cedula,
+          revisorCargo: user.usuario.cargo,
+          estado: 'borrador',
+          creadoPor: user.uid,
+        });
 
-      setRevisionId(id);
+        setRevisionId(id);
+      }
+
       setPaso('evidencias');
     } catch (error) {
-      console.error('Error creating revision:', error);
+      console.error('Error saving revision draft:', error);
       toast({
-        title: 'No fue posible crear la revisión',
+        title: isEditMode ? 'No fue posible actualizar el borrador' : 'No fue posible crear la revisión',
         description: 'Revise sus permisos e intente nuevamente.',
         variant: 'destructive',
       });
@@ -116,10 +267,21 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
       return;
     }
 
+    if (evidencias.length === 0) {
+      if (evidenciasExistentes.length === 0) {
+        return;
+      }
+
+      setPaso('firma');
+      return;
+    }
+
     setLoading(true);
 
     try {
-      await subirEvidencias(revisionId, evidencias);
+      const nuevasEvidencias = await subirEvidencias(revisionId, evidencias);
+      setEvidenciasExistentes((current) => [...current, ...nuevasEvidencias]);
+      setEvidencias([]);
       setPaso('firma');
     } catch (error) {
       console.error('Error uploading evidences:', error);
@@ -130,6 +292,34 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
       });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEliminarEvidencia = async (evidenciaId: string) => {
+    if (!revisionId) {
+      return;
+    }
+
+    setDeletingEvidenceId(evidenciaId);
+
+    try {
+      await eliminarEvidenciaBorradorRevision(revisionId, evidenciaId);
+      setEvidenciasExistentes((current) =>
+        current.filter((evidencia) => evidencia.id !== evidenciaId)
+      );
+      toast({
+        title: 'Evidencia eliminada',
+        description: 'La evidencia se retiró del borrador correctamente.',
+      });
+    } catch (error) {
+      console.error('Error deleting draft evidence:', error);
+      toast({
+        title: 'No fue posible eliminar la evidencia',
+        description: 'Intente nuevamente mientras el borrador siga sin firmar.',
+        variant: 'destructive',
+      });
+    } finally {
+      setDeletingEvidenceId(null);
     }
   };
 
@@ -144,7 +334,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
       const datosRevision = {
         ...getValues(),
         activo,
-        custodio,
+        custodio: selectedCustodio,
         revisor: user?.usuario,
         fecha: new Date().toISOString(),
       };
@@ -190,7 +380,9 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
       {paso === 'formulario' && (
         <form onSubmit={handleSubmit(onSubmitFormulario)} className='space-y-6'>
           <div className='mb-6 rounded-lg border border-border bg-muted p-4'>
-            <h3 className='mb-2 font-semibold'>Activo a revisar</h3>
+            <h3 className='mb-2 font-semibold'>
+              {isEditMode ? 'Borrador de revisión editable' : 'Activo a revisar'}
+            </h3>
             <p>
               <strong>Código:</strong> {activo.codigo}
             </p>
@@ -201,19 +393,40 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
               <strong>Ubicación:</strong> {assetLocation.locationName}
             </p>
             <p>
-              <strong>Custodio:</strong> {custodio.nombre}
+              <strong>Custodio:</strong> {selectedCustodio.nombre}
             </p>
+            {isEditMode ? (
+              <p className='mt-2 text-xs text-muted-foreground'>
+                Puede corregir datos y evidencias mientras el borrador no haya sido firmado por el revisor.
+              </p>
+            ) : null}
           </div>
+
+          {isEditMode ? (
+            <div>
+              <Label htmlFor='custodioId'>Custodio responsable</Label>
+              <Select id='custodioId' {...register('custodioId')}>
+                {custodioOptions.map((item) => (
+                  <option key={item.id} value={item.id}>
+                    {item.nombre} - {item.cedula}
+                  </option>
+                ))}
+              </Select>
+              {errors.custodioId ? (
+                <p className='text-sm text-red-500'>{errors.custodioId.message}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           <div>
             <Label htmlFor='fecha'>Fecha de revisión</Label>
-            <Input type='date' {...register('fecha')} />
+            <Input id='fecha' type='date' {...register('fecha')} />
             {errors.fecha && <p className='text-sm text-red-500'>{errors.fecha.message}</p>}
           </div>
 
           <div>
             <Label htmlFor='estadoActivo'>Estado del activo</Label>
-            <Select {...register('estadoActivo')}>
+            <Select id='estadoActivo' {...register('estadoActivo')}>
               <option value='excelente'>Excelente</option>
               <option value='bueno'>Bueno</option>
               <option value='regular'>Regular</option>
@@ -225,16 +438,20 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
           <div>
             <Label htmlFor='descripcion'>Descripción de la revisión</Label>
             <Textarea
+              id='descripcion'
               {...register('descripcion')}
               rows={4}
               placeholder='Describa detalladamente el estado del activo y los hallazgos de la revisión.'
             />
-            {errors.descripcion && <p className='text-sm text-red-500'>{errors.descripcion.message}</p>}
+            {errors.descripcion ? (
+              <p className='text-sm text-red-500'>{errors.descripcion.message}</p>
+            ) : null}
           </div>
 
           <div>
             <Label htmlFor='observaciones'>Observaciones adicionales</Label>
             <Textarea
+              id='observaciones'
               {...register('observaciones')}
               rows={3}
               placeholder='Observaciones o recomendaciones adicionales.'
@@ -242,7 +459,13 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
           </div>
 
           <Button type='submit' disabled={loading} className='w-full'>
-            {loading ? 'Guardando...' : 'Continuar a evidencias'}
+            {loading
+              ? isEditMode
+                ? 'Actualizando...'
+                : 'Guardando...'
+              : isEditMode
+              ? 'Guardar borrador y continuar'
+              : 'Continuar a evidencias'}
           </Button>
         </form>
       )}
@@ -256,12 +479,38 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
             </p>
           </div>
 
-          <EvidenciasUploader
-            evidencias={evidencias}
-            onChange={setEvidencias}
-            maxFiles={5}
-            accept={EVIDENCE_FILE_ACCEPT}
-          />
+          {evidenciasExistentes.length > 0 ? (
+            <div className='space-y-3'>
+              <div>
+                <h4 className='text-sm font-semibold text-foreground'>Evidencias ya registradas</h4>
+                <p className='text-xs text-muted-foreground'>
+                  Puede conservarlas o eliminarlas mientras la revisión siga en borrador.
+                </p>
+              </div>
+              <div className='grid grid-cols-2 gap-4 md:grid-cols-3'>
+                {evidenciasExistentes.map((evidencia) => (
+                  <ExistingEvidenceCard
+                    key={evidencia.id}
+                    evidencia={evidencia}
+                    deleting={deletingEvidenceId === evidencia.id}
+                    onDelete={() => void handleEliminarEvidencia(evidencia.id)}
+                  />
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className='space-y-2'>
+            <h4 className='text-sm font-semibold text-foreground'>
+              {isEditMode ? 'Agregar nuevas evidencias' : 'Evidencias del borrador'}
+            </h4>
+            <EvidenciasUploader
+              evidencias={evidencias}
+              onChange={setEvidencias}
+              maxFiles={Math.max(0, 5 - evidenciasExistentes.length)}
+              accept={EVIDENCE_FILE_ACCEPT}
+            />
+          </div>
 
           <div className='flex gap-4'>
             <Button variant='outline' onClick={() => setPaso('formulario')}>
@@ -269,7 +518,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
             </Button>
             <Button
               onClick={handleSubirEvidencias}
-              disabled={evidencias.length === 0 || loading}
+              disabled={totalEvidenceCount === 0 || loading || deletingEvidenceId !== null}
               className='flex-1'
             >
               {loading ? 'Subiendo...' : 'Continuar a firma'}
@@ -278,7 +527,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
         </div>
       )}
 
-      {paso === 'firma' && user?.usuario && (
+      {paso === 'firma' && user?.usuario ? (
         <SignaturePad
           titulo='Firma del profesional de logística'
           nombreFirmante={user.usuario.nombre}
@@ -287,7 +536,7 @@ export function RevisionForm({ activo, custodio, onSuccess }: RevisionFormProps)
           onSave={handleFirmaRevisor}
           onCancel={() => setPaso('evidencias')}
         />
-      )}
+      ) : null}
     </div>
   );
 }

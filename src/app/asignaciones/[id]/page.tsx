@@ -9,6 +9,7 @@ import {
   LucideClock,
   LucideDownload,
   LucideFileText,
+  LucideImageOff,
   LucideMapPin,
   LucidePenTool,
   LucideUser,
@@ -212,13 +213,20 @@ export default function AsignacionInicialDetailPage() {
                   key={evidencia.id}
                   className='relative aspect-square overflow-hidden rounded-xl border border-border/50 bg-muted shadow-elegant'
                 >
-                  <Image
-                    src={evidencia.url}
-                    alt={evidencia.nombre}
-                    fill
-                    className='object-cover'
-                    unoptimized
-                  />
+                  {evidencia.url ? (
+                    <Image
+                      src={evidencia.url}
+                      alt={evidencia.nombre}
+                      fill
+                      className='object-cover'
+                      unoptimized
+                    />
+                  ) : (
+                    <div className='flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground'>
+                      <LucideImageOff size={24} />
+                      <span className='px-3 text-center text-xs'>Vista previa no disponible</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>

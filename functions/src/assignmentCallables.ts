@@ -165,7 +165,7 @@ export const registerInitialAssignmentReviewerSignature = functions.region(REGIO
   const actor = ensureRole(context, ['admin', 'logistica']);
   const payload = data as { assignmentId?: string; storagePath?: string; url?: string };
 
-  if (!payload.assignmentId || !payload.storagePath || !payload.url) {
+  if (!payload.assignmentId || !payload.storagePath) {
     throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del revisor.');
   }
 
@@ -187,15 +187,15 @@ export const registerInitialAssignmentReviewerSignature = functions.region(REGIO
   }
 
   const { ipCliente, userAgent } = getClientMetadata(context);
-  const firma = {
-    url: payload.url,
+  const firma = stripUndefinedDeep({
+    ...(payload.url ? { url: payload.url } : {}),
     storagePath: payload.storagePath,
     fechaFirma: new Date().toISOString(),
     ipCliente,
     userAgent,
     hashDocumento: buildDocumentHash(assignment),
     declaracionAceptada: true,
-  };
+  });
 
   await assignmentRef.update({
     firmaRevisor: firma,
@@ -217,7 +217,7 @@ export const registerInitialAssignmentCustodianSignature = functions.region(REGI
     cedula?: string;
   };
 
-  if (!payload.assignmentId || !payload.storagePath || !payload.url || !payload.nombre || !payload.cedula) {
+  if (!payload.assignmentId || !payload.storagePath || !payload.nombre || !payload.cedula) {
     throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del custodio.');
   }
 
@@ -245,15 +245,15 @@ export const registerInitialAssignmentCustodianSignature = functions.region(REGI
   }
 
   const { ipCliente, userAgent } = getClientMetadata(context);
-  const firma = {
-    url: payload.url,
+  const firma = stripUndefinedDeep({
+    ...(payload.url ? { url: payload.url } : {}),
     storagePath: payload.storagePath,
     fechaFirma: new Date().toISOString(),
     ipCliente,
     userAgent,
     hashDocumento: buildDocumentHash(assignment),
     declaracionAceptada: true,
-  };
+  });
 
   await assignmentRef.update({
     firmaCustodio: firma,

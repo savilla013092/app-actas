@@ -9,12 +9,13 @@ import {
   LucideClock,
   LucideDownload,
   LucideFileText,
+  LucideImageOff,
   LucideMapPin,
   LucidePenTool,
   LucideUser,
 } from 'lucide-react';
 
-import { PageHeader } from '@/components/layout/PageHeader';
+import { PageHeader, type ActionButton } from '@/components/layout/PageHeader';
 import { SignaturePad } from '@/components/signature/SignaturePad';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
@@ -27,7 +28,7 @@ import { Revision } from '@/types/revision';
 
 export default function RevisionDetailPage() {
   const { id } = useParams();
-  const { user, isCustodio } = useAuth();
+  const { user, isAdmin, isCustodio, isLogistica } = useAuth();
   const [revision, setRevision] = useState<Revision | null>(null);
   const [loading, setLoading] = useState(true);
   const [signing, setSigning] = useState(false);
@@ -93,18 +94,23 @@ export default function RevisionDetailPage() {
 
   const canSign =
     revision.estado === 'pendiente_firma_custodio' && isCustodio() && revision.custodioId === user?.uid;
+  const canEditDraft = revision.estado === 'borrador' && (isAdmin() || isLogistica());
 
   const breadcrumbItems = [
     { label: 'Revisiones', href: '/revision', icon: <LucideFileText size={14} /> },
     { label: revision.numeroActa || 'Revisión' },
   ];
 
-  const actions = [] as Array<{
-    label: string;
-    onClick: () => void;
-    icon: React.ReactNode;
-    variant: 'default' | 'outline' | 'ghost' | 'destructive' | 'success' | 'warning' | 'info';
-  }>;
+  const actions: ActionButton[] = [];
+
+  if (canEditDraft) {
+    actions.push({
+      label: 'Editar borrador',
+      href: `/revision/${revision.id}/editar`,
+      icon: <LucidePenTool size={18} />,
+      variant: 'outline',
+    });
+  }
 
   if (revision.actaPdfUrl) {
     actions.push({
@@ -224,13 +230,20 @@ export default function RevisionDetailPage() {
                   key={evidencia.id}
                   className='relative aspect-square overflow-hidden rounded-xl border border-border/50 bg-muted shadow-elegant'
                 >
-                  <Image
-                    src={evidencia.url}
-                    alt={evidencia.nombre}
-                    fill
-                    className='object-cover'
-                    unoptimized
-                  />
+                  {evidencia.url ? (
+                    <Image
+                      src={evidencia.url}
+                      alt={evidencia.nombre}
+                      fill
+                      className='object-cover'
+                      unoptimized
+                    />
+                  ) : (
+                    <div className='flex h-full w-full flex-col items-center justify-center gap-2 text-muted-foreground'>
+                      <LucideImageOff size={24} />
+                      <span className='px-3 text-center text-xs'>Vista previa no disponible</span>
+                    </div>
+                  )}
                 </div>
               ))}
             </div>
@@ -296,6 +309,15 @@ export default function RevisionDetailPage() {
               </div>
             </div>
           </Card>
+
+          {canEditDraft ? (
+            <Card className='border-border/50 p-6 shadow-elegant'>
+              <p className='text-sm text-muted-foreground'>
+                Este borrador todavía puede editarse. Puede corregir fecha, custodio, descripción,
+                observaciones y evidencias hasta que el revisor registre su firma.
+              </p>
+            </Card>
+          ) : null}
         </div>
       </div>
 

@@ -45,6 +45,7 @@ exports.getUserProfile = getUserProfile;
 exports.syncUserClaims = syncUserClaims;
 exports.writeAuditLog = writeAuditLog;
 exports.ensureStoragePath = ensureStoragePath;
+exports.resolveStoredFilePath = resolveStoredFilePath;
 exports.getClientMetadata = getClientMetadata;
 exports.buildDocumentHash = buildDocumentHash;
 exports.toIsoDateString = toIsoDateString;
@@ -167,6 +168,26 @@ function ensureStoragePath(storagePath, expectedPrefix) {
         throw new functions.https.HttpsError('invalid-argument', 'La ruta del archivo no es vÃ¡lida.');
     }
 }
+function resolveStoredFilePath(file, bucketName) {
+    if (file === null || file === void 0 ? void 0 : file.storagePath) {
+        return file.storagePath;
+    }
+    const url = file === null || file === void 0 ? void 0 : file.url;
+    if (!url) {
+        throw new Error('STORAGE_PATH_REQUIRED');
+    }
+    if (url.includes('firebasestorage.googleapis.com')) {
+        const match = url.match(/\/o\/([^?]+)/);
+        if (match) {
+            return decodeURIComponent(match[1]);
+        }
+    }
+    if (url.includes('storage.googleapis.com')) {
+        const withoutBucket = url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
+        return decodeURIComponent(withoutBucket.split('?')[0]);
+    }
+    return decodeURIComponent(url.split('?')[0]);
+}
 function getClientMetadata(context) {
     var _a;
     const request = context.rawRequest;
@@ -194,7 +215,7 @@ function toIsoDateString(value) {
 function mapUploadedEvidence(files) {
     return files.map((file) => ({
         id: file.id,
-        url: file.url,
+        ...(file.url ? { url: file.url } : {}),
         nombre: file.nombre,
         descripcion: file.descripcion,
         storagePath: file.storagePath,

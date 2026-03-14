@@ -33,7 +33,7 @@ var __importStar = (this && this.__importStar) || (function () {
     };
 })();
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.onUsuarioWriteSyncClaims = exports.onRevisionFirmadaCompleta = exports.onDocumentoModificado = exports.onAsignacionFirmadaCompleta = exports.onActivoWriteSyncSearch = exports.startAssetImport = exports.searchActiveAssets = exports.markExpressLoanReturned = exports.createExpressLoan = exports.registerRevisionEvidence = exports.registerReviewerSignature = exports.registerCustodianSignature = exports.createRevisionDraft = exports.registerInitialAssignmentReviewerSignature = exports.registerInitialAssignmentEvidence = exports.registerInitialAssignmentCustodianSignature = exports.createInitialAssignmentDraft = exports.refreshSessionClaims = exports.adminUpdateUser = exports.adminSetUserActive = exports.adminResetPassword = exports.adminCreateUser = void 0;
+exports.onUsuarioWriteSyncClaims = exports.onRevisionFirmadaCompleta = exports.onDocumentoModificado = exports.onAsignacionFirmadaCompleta = exports.onActivoWriteSyncSearch = exports.startAssetImport = exports.searchActiveAssets = exports.markExpressLoanReturned = exports.createExpressLoan = exports.updateRevisionDraft = exports.registerRevisionEvidence = exports.registerReviewerSignature = exports.registerCustodianSignature = exports.deleteRevisionDraftEvidence = exports.createRevisionDraft = exports.registerInitialAssignmentReviewerSignature = exports.registerInitialAssignmentEvidence = exports.registerInitialAssignmentCustodianSignature = exports.createInitialAssignmentDraft = exports.refreshSessionClaims = exports.adminUpdateUser = exports.adminSetUserActive = exports.adminResetPassword = exports.adminCreateUser = void 0;
 const admin = __importStar(require("firebase-admin"));
 admin.initializeApp();
 var userCallables_1 = require("./userCallables");
@@ -49,9 +49,11 @@ Object.defineProperty(exports, "registerInitialAssignmentEvidence", { enumerable
 Object.defineProperty(exports, "registerInitialAssignmentReviewerSignature", { enumerable: true, get: function () { return assignmentCallables_1.registerInitialAssignmentReviewerSignature; } });
 var revisionCallables_1 = require("./revisionCallables");
 Object.defineProperty(exports, "createRevisionDraft", { enumerable: true, get: function () { return revisionCallables_1.createRevisionDraft; } });
+Object.defineProperty(exports, "deleteRevisionDraftEvidence", { enumerable: true, get: function () { return revisionCallables_1.deleteRevisionDraftEvidence; } });
 Object.defineProperty(exports, "registerCustodianSignature", { enumerable: true, get: function () { return revisionCallables_1.registerCustodianSignature; } });
 Object.defineProperty(exports, "registerReviewerSignature", { enumerable: true, get: function () { return revisionCallables_1.registerReviewerSignature; } });
 Object.defineProperty(exports, "registerRevisionEvidence", { enumerable: true, get: function () { return revisionCallables_1.registerRevisionEvidence; } });
+Object.defineProperty(exports, "updateRevisionDraft", { enumerable: true, get: function () { return revisionCallables_1.updateRevisionDraft; } });
 var assetCallables_1 = require("./assetCallables");
 Object.defineProperty(exports, "createExpressLoan", { enumerable: true, get: function () { return assetCallables_1.createExpressLoan; } });
 Object.defineProperty(exports, "markExpressLoanReturned", { enumerable: true, get: function () { return assetCallables_1.markExpressLoanReturned; } });

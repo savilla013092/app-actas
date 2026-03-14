@@ -125,7 +125,7 @@ exports.registerInitialAssignmentEvidence = functions.region(security_1.REGION).
 exports.registerInitialAssignmentReviewerSignature = functions.region(security_1.REGION).https.onCall(async (data, context) => {
     const actor = (0, security_1.ensureRole)(context, ['admin', 'logistica']);
     const payload = data;
-    if (!payload.assignmentId || !payload.storagePath || !payload.url) {
+    if (!payload.assignmentId || !payload.storagePath) {
         throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del revisor.');
     }
     (0, security_1.ensureStoragePath)(payload.storagePath, `asignaciones-firmas/${payload.assignmentId}/`);
@@ -142,15 +142,15 @@ exports.registerInitialAssignmentReviewerSignature = functions.region(security_1
         throw new functions.https.HttpsError('permission-denied', 'Solo el revisor asignado puede firmar este borrador.');
     }
     const { ipCliente, userAgent } = (0, security_1.getClientMetadata)(context);
-    const firma = {
-        url: payload.url,
+    const firma = (0, security_1.stripUndefinedDeep)({
+        ...(payload.url ? { url: payload.url } : {}),
         storagePath: payload.storagePath,
         fechaFirma: new Date().toISOString(),
         ipCliente,
         userAgent,
         hashDocumento: (0, security_1.buildDocumentHash)(assignment),
         declaracionAceptada: true,
-    };
+    });
     await assignmentRef.update({
         firmaRevisor: firma,
         estado: 'pendiente_firma_custodio',
@@ -163,7 +163,7 @@ exports.registerInitialAssignmentCustodianSignature = functions.region(security_
     var _a;
     const actor = (0, security_1.ensureRole)(context, ['custodio']);
     const payload = data;
-    if (!payload.assignmentId || !payload.storagePath || !payload.url || !payload.nombre || !payload.cedula) {
+    if (!payload.assignmentId || !payload.storagePath || !payload.nombre || !payload.cedula) {
         throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del custodio.');
     }
     (0, security_1.ensureStoragePath)(payload.storagePath, `asignaciones-firmas/${payload.assignmentId}/`);
@@ -180,15 +180,15 @@ exports.registerInitialAssignmentCustodianSignature = functions.region(security_
         throw new functions.https.HttpsError('permission-denied', 'Solo el custodio titular puede firmar esta asignación inicial.');
     }
     const { ipCliente, userAgent } = (0, security_1.getClientMetadata)(context);
-    const firma = {
-        url: payload.url,
+    const firma = (0, security_1.stripUndefinedDeep)({
+        ...(payload.url ? { url: payload.url } : {}),
         storagePath: payload.storagePath,
         fechaFirma: new Date().toISOString(),
         ipCliente,
         userAgent,
         hashDocumento: (0, security_1.buildDocumentHash)(assignment),
         declaracionAceptada: true,
-    };
+    });
     await assignmentRef.update({
         firmaCustodio: firma,
         custodioNombre: payload.nombre,

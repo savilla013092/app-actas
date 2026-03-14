@@ -9,10 +9,11 @@ import {
   QueryConstraint,
   where,
 } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { ref, uploadBytes } from 'firebase/storage';
 
 import { db, storage } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
+import { resolveStorageDownloadUrl } from '@/services/storageFileService';
 import { uploadEvidenceBatch } from '@/services/evidenceUploadService';
 import { AsignacionInicial, Evidencia } from '@/types/asignacion';
 
@@ -22,6 +23,36 @@ const mapAsignacion = (docId: string, data: Record<string, unknown>) => ({
   id: docId,
   ...data,
 }) as AsignacionInicial;
+
+const hydrateAssignmentEvidence = async (evidencia: Evidencia): Promise<Evidencia> => ({
+  ...evidencia,
+  url: await resolveStorageDownloadUrl(evidencia.storagePath, evidencia.url),
+});
+
+const hydrateAssignmentMedia = async (
+  assignment: AsignacionInicial
+): Promise<AsignacionInicial> => ({
+  ...assignment,
+  evidencias: await Promise.all((assignment.evidencias || []).map(hydrateAssignmentEvidence)),
+  firmaRevisor: assignment.firmaRevisor
+    ? {
+        ...assignment.firmaRevisor,
+        url: await resolveStorageDownloadUrl(
+          assignment.firmaRevisor.storagePath,
+          assignment.firmaRevisor.url
+        ),
+      }
+    : undefined,
+  firmaCustodio: assignment.firmaCustodio
+    ? {
+        ...assignment.firmaCustodio,
+        url: await resolveStorageDownloadUrl(
+          assignment.firmaCustodio.storagePath,
+          assignment.firmaCustodio.url
+        ),
+      }
+    : undefined,
+});
 
 export async function crearAsignacionInicial(
   data: Omit<AsignacionInicial, 'id' | 'creadoEn' | 'actualizadoEn' | 'evidencias'>
@@ -62,14 +93,11 @@ export async function firmarAsignacionComoRevisor(
   const storageRef = ref(storage, storagePath);
 
   await uploadBytes(storageRef, blob, { contentType: 'image/png' });
-  const url = await getDownloadURL(storageRef);
-
-  await callCallable<{ assignmentId: string; storagePath: string; url: string }, { ok: boolean }>(
+  await callCallable<{ assignmentId: string; storagePath: string }, { ok: boolean }>(
     'registerInitialAssignmentReviewerSignature',
     {
       assignmentId,
       storagePath,
-      url,
     }
   );
 }
@@ -89,15 +117,12 @@ export async function firmarAsignacionComoCustodio(
   const storageRef = ref(storage, storagePath);
 
   await uploadBytes(storageRef, blob, { contentType: 'image/png' });
-  const url = await getDownloadURL(storageRef);
-
   await callCallable<
-    { assignmentId: string; storagePath: string; url: string; nombre: string; cedula: string },
+    { assignmentId: string; storagePath: string; nombre: string; cedula: string },
     { ok: boolean }
   >('registerInitialAssignmentCustodianSignature', {
     assignmentId,
     storagePath,
-    url,
     nombre: datosFirmante.nombre.trim(),
     cedula: datosFirmante.cedula.trim(),
   });
@@ -106,7 +131,7 @@ export async function firmarAsignacionComoCustodio(
 export async function obtenerAsignacionInicial(id: string): Promise<AsignacionInicial | null> {
   const docSnap = await getDoc(doc(db, COLLECTION, id));
   if (!docSnap.exists()) return null;
-  return mapAsignacion(docSnap.id, docSnap.data());
+  return hydrateAssignmentMedia(mapAsignacion(docSnap.id, docSnap.data()));
 }
 
 export async function obtenerAsignacionInicialPorActivo(
@@ -122,7 +147,7 @@ export async function obtenerAsignacionInicialPorActivo(
   );
 
   const [firstDoc] = snapshot.docs;
-  return firstDoc ? mapAsignacion(firstDoc.id, firstDoc.data()) : null;
+  return firstDoc ? hydrateAssignmentMedia(mapAsignacion(firstDoc.id, firstDoc.data())) : null;
 }
 
 export async function obtenerAsignacionesPendientesFirma(

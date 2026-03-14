@@ -11,10 +11,11 @@ import {
   startAfter,
   where,
 } from 'firebase/firestore';
-import { getDownloadURL, ref, uploadBytes } from 'firebase/storage';
+import { ref, uploadBytes } from 'firebase/storage';
 
 import { db, storage } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
+import { resolveStorageDownloadUrl } from '@/services/storageFileService';
 import { uploadEvidenceBatch } from '@/services/evidenceUploadService';
 import { Evidencia, Revision } from '@/types/revision';
 
@@ -25,6 +26,34 @@ const mapRevision = (docId: string, data: Record<string, unknown>) => ({
   id: docId,
   ...data,
 }) as Revision;
+
+const hydrateEvidence = async (evidencia: Evidencia): Promise<Evidencia> => ({
+  ...evidencia,
+  url: await resolveStorageDownloadUrl(evidencia.storagePath, evidencia.url),
+});
+
+const hydrateRevisionMedia = async (revision: Revision): Promise<Revision> => ({
+  ...revision,
+  evidencias: await Promise.all((revision.evidencias || []).map(hydrateEvidence)),
+  firmaRevisor: revision.firmaRevisor
+    ? {
+        ...revision.firmaRevisor,
+        url: await resolveStorageDownloadUrl(
+          revision.firmaRevisor.storagePath,
+          revision.firmaRevisor.url
+        ),
+      }
+    : undefined,
+  firmaCustodio: revision.firmaCustodio
+    ? {
+        ...revision.firmaCustodio,
+        url: await resolveStorageDownloadUrl(
+          revision.firmaCustodio.storagePath,
+          revision.firmaCustodio.url
+        ),
+      }
+    : undefined,
+});
 
 const buildRevisionFilters = ({
   custodioId,
@@ -58,6 +87,21 @@ export interface PaginatedRevisionesResult {
   nextCursor: Revision['fecha'] | null;
   hasMore: boolean;
   totalCount: number;
+}
+
+export interface UpdateRevisionDraftPayload {
+  activoId: string;
+  codigoActivo: string;
+  descripcionActivo: string;
+  ubicacionActivo: string;
+  custodioId: string;
+  custodioNombre: string;
+  custodioCedula: string;
+  custodioCargo: string;
+  fecha: Date;
+  estadoActivo: Revision['estadoActivo'];
+  descripcion: string;
+  observaciones?: string;
 }
 
 export async function crearRevision(
@@ -115,14 +159,12 @@ export async function firmarComoRevisor(
   const storageRef = ref(storage, storagePath);
 
   await uploadBytes(storageRef, blob, { contentType: 'image/png' });
-  const url = await getDownloadURL(storageRef);
 
-  await callCallable<{ revisionId: string; storagePath: string; url: string }, { ok: boolean }>(
+  await callCallable<{ revisionId: string; storagePath: string }, { ok: boolean }>(
     'registerReviewerSignature',
     {
       revisionId,
       storagePath,
-      url,
     }
   );
 }
@@ -142,18 +184,40 @@ export async function firmarComoCustodio(
   const storageRef = ref(storage, storagePath);
 
   await uploadBytes(storageRef, blob, { contentType: 'image/png' });
-  const url = await getDownloadURL(storageRef);
 
   await callCallable<
-    { revisionId: string; storagePath: string; url: string; nombre: string; cedula: string },
+    { revisionId: string; storagePath: string; nombre: string; cedula: string },
     { ok: boolean }
   >('registerCustodianSignature', {
     revisionId,
     storagePath,
-    url,
     nombre: datosFirmante.nombre.trim(),
     cedula: datosFirmante.cedula.trim(),
   });
+}
+
+export async function actualizarBorradorRevision(
+  revisionId: string,
+  data: UpdateRevisionDraftPayload
+): Promise<void> {
+  await callCallable<Record<string, unknown>, { ok: boolean }>('updateRevisionDraft', {
+    revisionId,
+    ...data,
+    fecha: new Date(data.fecha).toISOString(),
+  });
+}
+
+export async function eliminarEvidenciaBorradorRevision(
+  revisionId: string,
+  evidenciaId: string
+): Promise<void> {
+  await callCallable<{ revisionId: string; evidenceId: string }, { ok: boolean }>(
+    'deleteRevisionDraftEvidence',
+    {
+      revisionId,
+      evidenceId: evidenciaId,
+    }
+  );
 }
 
 export async function obtenerRevisionesPendientesFirma(custodioId: string): Promise<Revision[]> {
@@ -184,7 +248,7 @@ export async function obtenerRevisionesPorRevisor(revisorId: string): Promise<Re
 export async function obtenerRevision(id: string): Promise<Revision | null> {
   const docSnap = await getDoc(doc(db, COLLECTION, id));
   if (!docSnap.exists()) return null;
-  return mapRevision(docSnap.id, docSnap.data());
+  return hydrateRevisionMedia(mapRevision(docSnap.id, docSnap.data()));
 }
 
 export async function obtenerRevisionesPorActivo(activoId: string): Promise<Revision[]> {

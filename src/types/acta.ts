@@ -7,16 +7,16 @@ export type EstadoActaProceso =
 
 export interface Evidencia {
   id: string;
-  url: string;
+  url?: string;
   nombre: string;
   descripcion?: string;
-  storagePath?: string;
+  storagePath: string;
   subidaEn: Date;
 }
 
 export interface FirmaDigital {
-  url: string;
-  storagePath?: string;
+  url?: string;
+  storagePath: string;
   fechaFirma: Date;
   ipCliente: string;
   userAgent: string;

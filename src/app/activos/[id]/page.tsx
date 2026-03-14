@@ -207,7 +207,14 @@ export default function ActivoDetailPage() {
             ) : revisiones.length > 0 ? (
               <div className='space-y-3'>
                 {revisiones.map((revision) => (
-                  <Link key={revision.id} href={`/revision/${revision.id}`}>
+                  <Link
+                    key={revision.id}
+                    href={
+                      revision.estado === 'borrador' && (isLogistica() || isAdmin())
+                        ? `/revision/${revision.id}/editar`
+                        : `/revision/${revision.id}`
+                    }
+                  >
                     <div className='cursor-pointer rounded-xl border border-border/50 bg-muted/50 p-4 transition-colors hover:bg-muted'>
                       <div className='flex items-center justify-between'>
                         <div className='flex items-center gap-3'>

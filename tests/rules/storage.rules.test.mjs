@@ -1,7 +1,7 @@
 import test, { after, before, beforeEach } from 'node:test';
 
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { ref, uploadString } from 'firebase/storage';
+import { deleteObject, ref, uploadString } from 'firebase/storage';
 
 import {
   authClaims,
@@ -29,6 +29,10 @@ function uploadFile(storage, path, contentType = 'image/jpeg', contents = 'image
   return uploadString(ref(storage, path), contents, 'raw', { contentType });
 }
 
+function deleteFile(storage, path) {
+  return deleteObject(ref(storage, path));
+}
+
 test('evidencias: solo admin/logistica pueden subir imagenes a revisiones abiertas', async () => {
   const logisticaStorage = storageContext(testEnv, ids.logistica, authClaims.logistica);
   const custodioStorage = storageContext(testEnv, ids.custodio, authClaims.custodio);
@@ -43,6 +47,36 @@ test('evidencias: solo admin/logistica pueden subir imagenes a revisiones abiert
 
   await assertFails(
     uploadFile(logisticaStorage, `evidencias/${ids.revisionDraft}/foto-heic.heic`, 'image/heic')
+  );
+});
+
+test('evidencias: solo admin/logistica pueden borrar archivos y solo en borradores', async () => {
+  const logisticaStorage = storageContext(testEnv, ids.logistica, authClaims.logistica);
+  const adminStorage = storageContext(testEnv, ids.admin, authClaims.admin);
+  const custodioStorage = storageContext(testEnv, ids.custodio, authClaims.custodio);
+
+  await assertSucceeds(
+    uploadFile(logisticaStorage, `evidencias/${ids.revisionDraft}/foto-borrador.jpg`)
+  );
+  await assertSucceeds(
+    uploadFile(logisticaStorage, `evidencias/${ids.revisionPending}/foto-pendiente.jpg`)
+  );
+
+  await assertSucceeds(
+    deleteFile(logisticaStorage, `evidencias/${ids.revisionDraft}/foto-borrador.jpg`)
+  );
+  await assertFails(
+    deleteFile(logisticaStorage, `evidencias/${ids.revisionPending}/foto-pendiente.jpg`)
+  );
+  await assertFails(
+    deleteFile(custodioStorage, `evidencias/${ids.revisionPending}/foto-pendiente.jpg`)
+  );
+
+  await assertSucceeds(
+    uploadFile(logisticaStorage, `evidencias/${ids.revisionDraft}/foto-admin.jpg`)
+  );
+  await assertSucceeds(
+    deleteFile(adminStorage, `evidencias/${ids.revisionDraft}/foto-admin.jpg`)
   );
 });
 

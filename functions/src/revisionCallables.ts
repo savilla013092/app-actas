@@ -13,6 +13,7 @@ import {
   getClientMetadata,
   getContextRole,
   mapUploadedEvidence,
+  resolveStoredFilePath,
   serverTimestamp,
   stripUndefinedDeep,
   writeAuditLog,
@@ -33,6 +34,22 @@ interface RevisionDraftPayload {
   fecha: string;
   estadoActivo: string;
   descripcion: string;
+  observaciones?: string;
+}
+
+interface UpdateRevisionDraftPayload {
+  revisionId?: string;
+  activoId?: string;
+  codigoActivo?: string;
+  descripcionActivo?: string;
+  ubicacionActivo?: string;
+  custodioId?: string;
+  custodioNombre?: string;
+  custodioCedula?: string;
+  custodioCargo?: string;
+  fecha?: string;
+  estadoActivo?: string;
+  descripcion?: string;
   observaciones?: string;
 }
 
@@ -108,6 +125,106 @@ export const createRevisionDraft = functions.region(REGION).https.onCall(async (
   return { id: revisionRef.id };
 });
 
+export const updateRevisionDraft = functions.region(REGION).https.onCall(async (data, context) => {
+  const actor = ensureRole(context, ['admin', 'logistica']);
+  const payload = data as UpdateRevisionDraftPayload;
+
+  if (
+    !payload.revisionId ||
+    !payload.activoId ||
+    !payload.codigoActivo ||
+    !payload.descripcionActivo ||
+    !payload.ubicacionActivo ||
+    !payload.custodioId ||
+    !payload.custodioNombre ||
+    !payload.custodioCedula ||
+    !payload.custodioCargo ||
+    !payload.fecha ||
+    !payload.estadoActivo ||
+    !payload.descripcion
+  ) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'La actualizacion del borrador no contiene los campos obligatorios.'
+    );
+  }
+
+  const revisionRef = db.collection('revisiones').doc(payload.revisionId);
+  const revisionSnapshot = await revisionRef.get();
+  if (!revisionSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+  }
+
+  const revision = revisionSnapshot.data() as Record<string, unknown>;
+  if (revision.estado !== 'borrador') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Solo los borradores pueden editarse.'
+    );
+  }
+
+  if (revision.revisorId !== actor.uid && getContextRole(context) !== 'admin') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Solo el revisor asignado puede editar este borrador.'
+    );
+  }
+
+  if (revision.activoId !== payload.activoId) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'El borrador debe mantenerse asociado al mismo activo.'
+    );
+  }
+
+  const activoSnapshot = await db.collection('activos').doc(payload.activoId).get();
+  if (!activoSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'El activo asociado ya no existe.');
+  }
+
+  const custodioSnapshot = await db.collection('usuarios').doc(payload.custodioId).get();
+  if (!custodioSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'El custodio indicado ya no existe.');
+  }
+
+  const custodio = custodioSnapshot.data() as { rol?: string; activo?: boolean };
+  if (custodio.rol !== 'custodio' || custodio.activo !== true) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'El custodio seleccionado debe estar activo y tener rol de custodio.'
+    );
+  }
+
+  await revisionRef.update(
+    stripUndefinedDeep({
+      codigoActivo: payload.codigoActivo,
+      descripcionActivo: payload.descripcionActivo,
+      ubicacionActivo: payload.ubicacionActivo,
+      custodioId: payload.custodioId,
+      custodioNombre: payload.custodioNombre,
+      custodioCedula: payload.custodioCedula,
+      custodioCargo: payload.custodioCargo,
+      fecha: admin.firestore.Timestamp.fromDate(new Date(payload.fecha)),
+      estadoActivo: payload.estadoActivo,
+      descripcion: payload.descripcion,
+      observaciones: payload.observaciones,
+      actualizadoEn: serverTimestamp(),
+      actualizadoPor: actor.uid,
+    })
+  );
+
+  await writeAuditLog({
+    accion: 'actualizar_revision_borrador',
+    modulo: 'revisiones',
+    documentoId: payload.revisionId,
+    usuarioId: actor.uid,
+    usuarioEmail: context.auth?.token.email as string | undefined,
+    descripcion: 'Se actualizó un borrador de revisión.',
+  });
+
+  return { ok: true };
+});
+
 export const registerRevisionEvidence = functions.region(REGION).https.onCall(async (data, context) => {
   const actor = ensureRole(context, ['admin', 'logistica']);
   const payload = data as { revisionId?: string; evidences?: UploadedFilePayload[] };
@@ -140,11 +257,76 @@ export const registerRevisionEvidence = functions.region(REGION).https.onCall(as
   return { count: updatedEvidences.length };
 });
 
+export const deleteRevisionDraftEvidence = functions.region(REGION).https.onCall(async (data, context) => {
+  const actor = ensureRole(context, ['admin', 'logistica']);
+  const payload = data as { revisionId?: string; evidenceId?: string };
+
+  if (!payload.revisionId || !payload.evidenceId) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'Debe indicar la revisión y la evidencia a eliminar.'
+    );
+  }
+
+  const revisionRef = db.collection('revisiones').doc(payload.revisionId);
+  const revisionSnapshot = await revisionRef.get();
+  if (!revisionSnapshot.exists) {
+    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+  }
+
+  const revision = revisionSnapshot.data() as {
+    estado?: ActaWorkflowState;
+    revisorId?: string;
+    evidencias?: Array<{ id?: string; storagePath?: string; url?: string }>;
+  };
+
+  if (revision.estado !== 'borrador') {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'Solo los borradores permiten eliminar evidencias.'
+    );
+  }
+
+  if (revision.revisorId !== actor.uid && getContextRole(context) !== 'admin') {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Solo el revisor asignado puede modificar este borrador.'
+    );
+  }
+
+  const evidencias = revision.evidencias || [];
+  const evidenceToDelete = evidencias.find((evidencia) => evidencia.id === payload.evidenceId);
+  if (!evidenceToDelete) {
+    throw new functions.https.HttpsError('not-found', 'La evidencia indicada no existe en este borrador.');
+  }
+
+  const updatedEvidences = evidencias.filter((evidencia) => evidencia.id !== payload.evidenceId);
+  await revisionRef.update({
+    evidencias: updatedEvidences,
+    actualizadoEn: serverTimestamp(),
+    actualizadoPor: actor.uid,
+  });
+
+  const storagePath = resolveStoredFilePath(evidenceToDelete, admin.storage().bucket().name);
+  await admin.storage().bucket().file(storagePath).delete({ ignoreNotFound: true });
+
+  await writeAuditLog({
+    accion: 'eliminar_evidencia_revision_borrador',
+    modulo: 'revisiones',
+    documentoId: payload.revisionId,
+    usuarioId: actor.uid,
+    usuarioEmail: context.auth?.token.email as string | undefined,
+    descripcion: 'Se eliminó una evidencia de un borrador de revisión.',
+  });
+
+  return { ok: true };
+});
+
 export const registerReviewerSignature = functions.region(REGION).https.onCall(async (data, context) => {
   const actor = ensureRole(context, ['admin', 'logistica']);
   const payload = data as { revisionId?: string; storagePath?: string; url?: string };
 
-  if (!payload.revisionId || !payload.storagePath || !payload.url) {
+  if (!payload.revisionId || !payload.storagePath) {
     throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del revisor.');
   }
 
@@ -166,15 +348,15 @@ export const registerReviewerSignature = functions.region(REGION).https.onCall(a
   }
 
   const { ipCliente, userAgent } = getClientMetadata(context);
-  const firma = {
-    url: payload.url,
+  const firma = stripUndefinedDeep({
+    ...(payload.url ? { url: payload.url } : {}),
     storagePath: payload.storagePath,
     fechaFirma: new Date().toISOString(),
     ipCliente,
     userAgent,
     hashDocumento: buildDocumentHash(revision),
     declaracionAceptada: true,
-  };
+  });
 
   await revisionRef.update({
     firmaRevisor: firma,
@@ -196,7 +378,7 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
     cedula?: string;
   };
 
-  if (!payload.revisionId || !payload.storagePath || !payload.url || !payload.nombre || !payload.cedula) {
+  if (!payload.revisionId || !payload.storagePath || !payload.nombre || !payload.cedula) {
     throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del custodio.');
   }
 
@@ -218,15 +400,15 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
   }
 
   const { ipCliente, userAgent } = getClientMetadata(context);
-  const firma = {
-    url: payload.url,
+  const firma = stripUndefinedDeep({
+    ...(payload.url ? { url: payload.url } : {}),
     storagePath: payload.storagePath,
     fechaFirma: new Date().toISOString(),
     ipCliente,
     userAgent,
     hashDocumento: buildDocumentHash(revision),
     declaracionAceptada: true,
-  };
+  });
 
   await revisionRef.update({
     firmaCustodio: firma,

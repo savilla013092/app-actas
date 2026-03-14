@@ -2,27 +2,12 @@
 import * as fs from 'fs';
 import * as path from 'path';
 import PDFDocument from 'pdfkit';
+import { resolveStoredFilePath } from './security';
 
 interface GenerarPDFParams {
   numeroActa: string;
   revision: FirebaseFirestore.DocumentData;
   storage: admin.storage.Storage;
-}
-
-function extractStoragePath(url: string, bucketName: string): string {
-  if (url.includes('firebasestorage.googleapis.com')) {
-    const match = url.match(/\/o\/([^?]+)/);
-    if (match) {
-      return decodeURIComponent(match[1]);
-    }
-  }
-
-  if (url.includes('storage.googleapis.com')) {
-    const withoutBucket = url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
-    return decodeURIComponent(withoutBucket.split('?')[0]);
-  }
-
-  return decodeURIComponent(url.split('?')[0]);
 }
 
 function asDate(value: unknown): Date {
@@ -47,15 +32,15 @@ export async function generarActaPDF({ numeroActa, revision, storage }: GenerarP
 
       const bucket = storage.bucket();
       const bucketName = bucket.name;
-      const firmaRevisorPath = extractStoragePath(revision.firmaRevisor.url, bucketName);
-      const firmaCustodioPath = extractStoragePath(revision.firmaCustodio.url, bucketName);
+      const firmaRevisorPath = resolveStoredFilePath(revision.firmaRevisor, bucketName);
+      const firmaCustodioPath = resolveStoredFilePath(revision.firmaCustodio, bucketName);
       const [firmaRevisorBuffer] = await bucket.file(firmaRevisorPath).download();
       const [firmaCustodioBuffer] = await bucket.file(firmaCustodioPath).download();
 
       const evidenciasBuffers: Buffer[] = [];
       for (const evidencia of revision.evidencias.slice(0, 4)) {
         try {
-          const evidenciaPath = extractStoragePath(evidencia.url, bucketName);
+          const evidenciaPath = resolveStoredFilePath(evidencia, bucketName);
           const [buffer] = await bucket.file(evidenciaPath).download();
           evidenciasBuffers.push(buffer);
         } catch (error) {

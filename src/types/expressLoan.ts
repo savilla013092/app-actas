@@ -3,7 +3,8 @@ export type ExpressLoanItemType = "activo_registrado" | "comodin";
 
 export interface ExpressLoanEvidence {
   id: string;
-  url: string;
+  url?: string;
+  storagePath: string;
   nombre: string;
   subidaEn: string;
 }

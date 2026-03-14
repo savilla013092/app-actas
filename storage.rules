@@ -78,6 +78,9 @@ service firebase.storage {
         isOpenRevisionState(revisionId) &&
         request.resource.size < 5 * 1024 * 1024 &&
         isSupportedEvidenceImage();
+      allow delete: if isAdminOrLogistica() &&
+        revisionExists(revisionId) &&
+        revisionDoc(revisionId).estado == 'borrador';
     }
 
     match /firmas/{revisionId}/{fileName} {

@@ -293,7 +293,14 @@ export default function RevisionesPage() {
       {filteredRevisiones.length > 0 ? (
         <div className='space-y-4'>
           {filteredRevisiones.map((revision) => (
-            <Link key={revision.id} href={`/revision/${revision.id}`}>
+            <Link
+              key={revision.id}
+              href={
+                revision.estado === 'borrador' && canSeeAllRevisions
+                  ? `/revision/${revision.id}/editar`
+                  : `/revision/${revision.id}`
+              }
+            >
               <Card className='cursor-pointer border-l-4 border-l-primary/30 p-5 hover:border-l-primary hover-lift'>
                 <div className='flex flex-col gap-4 md:flex-row md:items-center md:justify-between'>
                   <div className='flex min-w-0 flex-1 items-center gap-4'>
@@ -338,6 +345,8 @@ export default function RevisionesPage() {
                     <Button variant='outline' size='sm'>
                       {canSignPendingRevisions && revision.estado === 'pendiente_firma_custodio'
                         ? 'Firmar'
+                        : revision.estado === 'borrador' && canSeeAllRevisions
+                        ? 'Editar borrador'
                         : 'Ver detalle'}
                     </Button>
                   </div>

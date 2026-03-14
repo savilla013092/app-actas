@@ -17,9 +17,11 @@ export {
 } from './assignmentCallables';
 export {
   createRevisionDraft,
+  deleteRevisionDraftEvidence,
   registerCustodianSignature,
   registerReviewerSignature,
   registerRevisionEvidence,
+  updateRevisionDraft,
 } from './revisionCallables';
 export {
   createExpressLoan,

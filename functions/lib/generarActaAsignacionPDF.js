@@ -40,19 +40,7 @@ exports.generarActaAsignacionPDF = generarActaAsignacionPDF;
 const fs = __importStar(require("fs"));
 const path = __importStar(require("path"));
 const pdfkit_1 = __importDefault(require("pdfkit"));
-function extractStoragePath(url, bucketName) {
-    if (url.includes('firebasestorage.googleapis.com')) {
-        const match = url.match(/\/o\/([^?]+)/);
-        if (match) {
-            return decodeURIComponent(match[1]);
-        }
-    }
-    if (url.includes('storage.googleapis.com')) {
-        const withoutBucket = url.replace(`https://storage.googleapis.com/${bucketName}/`, '');
-        return decodeURIComponent(withoutBucket.split('?')[0]);
-    }
-    return decodeURIComponent(url.split('?')[0]);
-}
+const security_1 = require("./security");
 function asDate(value) {
     if (value && typeof value === 'object' && 'toDate' in value) {
         return value.toDate();
@@ -72,14 +60,14 @@ async function generarActaAsignacionPDF({ numeroActa, asignacion, storage, }) {
             doc.on('error', reject);
             const bucket = storage.bucket();
             const bucketName = bucket.name;
-            const firmaRevisorPath = extractStoragePath(asignacion.firmaRevisor.url, bucketName);
-            const firmaCustodioPath = extractStoragePath(asignacion.firmaCustodio.url, bucketName);
+            const firmaRevisorPath = (0, security_1.resolveStoredFilePath)(asignacion.firmaRevisor, bucketName);
+            const firmaCustodioPath = (0, security_1.resolveStoredFilePath)(asignacion.firmaCustodio, bucketName);
             const [firmaRevisorBuffer] = await bucket.file(firmaRevisorPath).download();
             const [firmaCustodioBuffer] = await bucket.file(firmaCustodioPath).download();
             const evidenciasBuffers = [];
             for (const evidencia of asignacion.evidencias.slice(0, 4)) {
                 try {
-                    const evidenciaPath = extractStoragePath(evidencia.url, bucketName);
+                    const evidenciaPath = (0, security_1.resolveStoredFilePath)(evidencia, bucketName);
                     const [buffer] = await bucket.file(evidenciaPath).download();
                     evidenciasBuffers.push(buffer);
                 }
