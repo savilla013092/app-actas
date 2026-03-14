@@ -56,24 +56,118 @@ interface RevisionFormProps {
   onSuccess: (revisionId: string) => void;
   revision?: Revision | null;
   custodios?: Usuario[];
+  custodioSelectionEnabled?: boolean;
+  loadWarning?: string | null;
+}
+
+interface SafeDateInputResult {
+  value: string;
+  usedFallback: boolean;
+}
+
+const FALLBACK_CUSTODIO = {
+  nombre: 'Custodio sin nombre',
+  cedula: 'Sin cedula',
+  cargo: 'Sin cargo',
+} as const;
+
+function toDateInputValue(value: Date): string {
+  const normalized = new Date(value.getTime() - value.getTimezoneOffset() * 60000);
+  return normalized.toISOString().split('T')[0];
+}
+
+function logIncompleteField(
+  field: string,
+  documentId: string,
+  source: string,
+  value: unknown
+) {
+  console.warn('[RevisionForm] dato incompleto detectado.', {
+    documentId,
+    source,
+    field,
+    value,
+  });
+}
+
+function normalizeTextField(
+  value: unknown,
+  fallback: string,
+  field: 'nombre' | 'cedula' | 'cargo',
+  documentId: string,
+  source: string
+): string {
+  if (typeof value === 'string' && value.trim()) {
+    return value.trim();
+  }
+
+  logIncompleteField(field, documentId, source, value);
+  return fallback;
+}
+
+function normalizeCustodioSnapshot(
+  value: Partial<CustodioSnapshot> | undefined,
+  documentId: string,
+  source: string
+): CustodioSnapshot | null {
+  const id = typeof value?.id === 'string' ? value.id.trim() : '';
+
+  if (!id) {
+    logIncompleteField('id', documentId, source, value?.id);
+    return null;
+  }
+
+  return {
+    id,
+    nombre: normalizeTextField(
+      value?.nombre,
+      FALLBACK_CUSTODIO.nombre,
+      'nombre',
+      documentId,
+      source
+    ),
+    cedula: normalizeTextField(
+      value?.cedula,
+      FALLBACK_CUSTODIO.cedula,
+      'cedula',
+      documentId,
+      source
+    ),
+    cargo: normalizeTextField(
+      value?.cargo,
+      FALLBACK_CUSTODIO.cargo,
+      'cargo',
+      documentId,
+      source
+    ),
+  };
 }
 
 function formatDateInput(
-  value?: Date | { seconds: number } | { toDate: () => Date } | null
-): string {
+  value: Date | { seconds: number } | { toDate: () => Date } | string | null | undefined,
+  documentId: string
+): SafeDateInputResult {
   if (!value) {
-    return new Date().toISOString().split('T')[0];
+    logIncompleteField('fecha', documentId, 'revision actual', value);
+    return { value: toDateInputValue(new Date()), usedFallback: true };
   }
+
+  let parsedDate: Date;
 
   if (typeof value === 'object' && 'toDate' in value) {
-    return value.toDate().toISOString().split('T')[0];
+    parsedDate = value.toDate();
+  } else if (typeof value === 'object' && 'seconds' in value) {
+    parsedDate = new Date(value.seconds * 1000);
+  } else {
+    parsedDate = new Date(value);
   }
 
-  if (typeof value === 'object' && 'seconds' in value) {
-    return new Date(value.seconds * 1000).toISOString().split('T')[0];
+  if (Number.isNaN(parsedDate.getTime())) {
+    logIncompleteField('fecha', documentId, 'revision actual', value);
+    return { value: toDateInputValue(new Date()), usedFallback: true };
   }
 
-  return new Date(value).toISOString().split('T')[0];
+  return { value: toDateInputValue(parsedDate), usedFallback: false };
 }
 
 function ExistingEvidenceCard({
@@ -121,20 +215,40 @@ export function RevisionForm({
   onSuccess,
   revision = null,
   custodios = [],
+  custodioSelectionEnabled = true,
+  loadWarning = null,
 }: RevisionFormProps) {
   const { user } = useAuth();
   const isEditMode = revision !== null;
-  const initialCustodio = useMemo<CustodioSnapshot>(
+  const documentId = revision?.id ?? 'nueva-revision';
+  const initialCustodio = useMemo<CustodioSnapshot | null>(
     () =>
-      revision
-        ? {
-            id: revision.custodioId,
-            nombre: revision.custodioNombre,
-            cedula: revision.custodioCedula,
-            cargo: revision.custodioCargo,
-          }
-        : custodio,
-    [custodio, revision]
+      normalizeCustodioSnapshot(
+        revision
+          ? {
+              id: revision.custodioId,
+              nombre: revision.custodioNombre,
+              cedula: revision.custodioCedula,
+              cargo: revision.custodioCargo,
+            }
+          : custodio,
+        documentId,
+        'custodio actual'
+      ),
+    [custodio, documentId, revision]
+  );
+  const fallbackCustodio = useMemo<CustodioSnapshot>(
+    () => ({
+      id: initialCustodio?.id ?? '',
+      nombre: initialCustodio?.nombre ?? FALLBACK_CUSTODIO.nombre,
+      cedula: initialCustodio?.cedula ?? FALLBACK_CUSTODIO.cedula,
+      cargo: initialCustodio?.cargo ?? FALLBACK_CUSTODIO.cargo,
+    }),
+    [initialCustodio]
+  );
+  const initialDate = useMemo(
+    () => formatDateInput(revision?.fecha ?? null, documentId),
+    [documentId, revision?.fecha]
   );
 
   const [paso, setPaso] = useState<'formulario' | 'evidencias' | 'firma'>('formulario');
@@ -148,21 +262,26 @@ export function RevisionForm({
   const custodioOptions = useMemo(() => {
     const options = new Map<string, CustodioSnapshot>();
 
-    options.set(initialCustodio.id, initialCustodio);
+    if (fallbackCustodio.id) {
+      options.set(fallbackCustodio.id, fallbackCustodio);
+    }
 
     custodios
       .filter((usuario) => usuario.rol === 'custodio' && usuario.activo)
       .forEach((usuario) => {
-        options.set(usuario.id, {
-          id: usuario.id,
-          nombre: usuario.nombre,
-          cedula: usuario.cedula,
-          cargo: usuario.cargo,
-        });
+        const normalized = normalizeCustodioSnapshot(usuario, documentId, `usuario:${usuario.id}`);
+        if (normalized) {
+          options.set(normalized.id, normalized);
+        }
       });
 
-    return Array.from(options.values()).sort((left, right) => left.nombre.localeCompare(right.nombre));
-  }, [custodios, initialCustodio]);
+    return Array.from(options.values()).sort((left, right) =>
+      (left.nombre || FALLBACK_CUSTODIO.nombre).localeCompare(
+        right.nombre || FALLBACK_CUSTODIO.nombre,
+        'es-CO'
+      )
+    );
+  }, [custodios, documentId, fallbackCustodio]);
 
   const {
     register,
@@ -173,24 +292,24 @@ export function RevisionForm({
   } = useForm<RevisionFormData>({
     resolver: zodResolver(revisionSchema),
     defaultValues: {
-      fecha: formatDateInput(revision?.fecha ?? null),
+      fecha: initialDate.value,
       estadoActivo: revision?.estadoActivo ?? 'bueno',
       descripcion: revision?.descripcion ?? '',
       observaciones: revision?.observaciones ?? '',
-      custodioId: initialCustodio.id,
+      custodioId: fallbackCustodio.id,
     },
   });
 
   const selectedCustodioId = watch('custodioId');
   const selectedCustodio =
-    custodioOptions.find((item) => item.id === selectedCustodioId) ?? initialCustodio;
+    custodioOptions.find((item) => item.id === selectedCustodioId) ?? fallbackCustodio;
   const totalEvidenceCount = evidenciasExistentes.length + evidencias.length;
 
   const buildDraftPayload = (data: RevisionFormData): UpdateRevisionDraftPayload | null => {
     const custodioSeleccionado =
-      custodioOptions.find((item) => item.id === data.custodioId) ?? initialCustodio;
+      custodioOptions.find((item) => item.id === data.custodioId) ?? fallbackCustodio;
 
-    if (!custodioSeleccionado) {
+    if (!custodioSeleccionado || !custodioSeleccionado.id) {
       return null;
     }
 
@@ -402,7 +521,19 @@ export function RevisionForm({
             ) : null}
           </div>
 
-          {isEditMode ? (
+          {loadWarning ? (
+            <div className='rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'>
+              {loadWarning}
+            </div>
+          ) : null}
+
+          {isEditMode && initialDate.usedFallback ? (
+            <div className='rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900'>
+              La fecha original del borrador no era valida. Se cargo la fecha de hoy para evitar bloquear la edicion.
+            </div>
+          ) : null}
+
+          {isEditMode && custodioSelectionEnabled ? (
             <div>
               <Label htmlFor='custodioId'>Custodio responsable</Label>
               <Select id='custodioId' {...register('custodioId')}>
@@ -415,6 +546,18 @@ export function RevisionForm({
               {errors.custodioId ? (
                 <p className='text-sm text-red-500'>{errors.custodioId.message}</p>
               ) : null}
+            </div>
+          ) : null}
+
+          {isEditMode && !custodioSelectionEnabled ? (
+            <div>
+              <Label>Custodio responsable</Label>
+              <div className='rounded-md border border-input bg-muted px-3 py-2 text-sm text-foreground'>
+                {selectedCustodio.nombre} - {selectedCustodio.cedula}
+              </div>
+              <p className='mt-1 text-xs text-muted-foreground'>
+                El directorio de custodios no esta disponible en este momento. Puede seguir editando el borrador con el custodio actual.
+              </p>
             </div>
           ) : null}
 

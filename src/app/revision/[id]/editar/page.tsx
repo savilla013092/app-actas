@@ -25,6 +25,8 @@ export default function EditarRevisionPage() {
   const [revision, setRevision] = useState<Revision | null>(null);
   const [activo, setActivo] = useState<Activo | null>(null);
   const [custodios, setCustodios] = useState<Usuario[]>([]);
+  const [custodioSelectionEnabled, setCustodioSelectionEnabled] = useState(true);
+  const [loadWarning, setLoadWarning] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -41,13 +43,26 @@ export default function EditarRevisionPage() {
           return;
         }
 
-        const [activoData, usuarios] = await Promise.all([
-          obtenerActivo(revisionData.activoId),
-          obtenerTodosLosUsuarios(),
-        ]);
+        const activoData = await obtenerActivo(revisionData.activoId);
 
         setActivo(activoData);
-        setCustodios(usuarios.filter((usuario) => usuario.rol === 'custodio' && usuario.activo));
+
+        try {
+          const usuarios = await obtenerTodosLosUsuarios();
+          setCustodios(usuarios.filter((usuario) => usuario.rol === 'custodio' && usuario.activo));
+          setCustodioSelectionEnabled(true);
+          setLoadWarning(null);
+        } catch (userDirectoryError) {
+          console.warn('No fue posible cargar el directorio de custodios para editar el borrador.', {
+            revisionId: revisionData.id,
+            error: userDirectoryError,
+          });
+          setCustodios([]);
+          setCustodioSelectionEnabled(false);
+          setLoadWarning(
+            'No fue posible cargar el directorio de custodios. El borrador sigue editable, pero por ahora se mantendra el custodio actual.'
+          );
+        }
       } catch (error) {
         console.error('Error loading revision draft editor:', error);
       } finally {
@@ -135,6 +150,8 @@ export default function EditarRevisionPage() {
           }}
           revision={revision}
           custodios={custodios}
+          custodioSelectionEnabled={custodioSelectionEnabled}
+          loadWarning={loadWarning}
           onSuccess={handleSuccess}
         />
       </Card>
