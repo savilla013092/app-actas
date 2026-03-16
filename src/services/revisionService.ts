@@ -11,21 +11,16 @@ import {
   startAfter,
   where,
 } from 'firebase/firestore';
-import { ref, uploadBytes } from 'firebase/storage';
 
-import { db, storage } from '@/lib/firebase/config';
+import { db } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
 import { resolveStorageDownloadUrl } from '@/services/storageFileService';
-import { uploadEvidenceBatch } from '@/services/evidenceUploadService';
+import { prepareEvidenceFilesForCallable } from '@/services/evidenceUploadService';
 import { ensureOperationalSession } from '@/services/sessionService';
 import { Evidencia, Revision } from '@/types/revision';
 
 const COLLECTION = 'revisiones';
 const DEFAULT_PAGE_SIZE = 50;
-
-async function toUploadBytes(blob: Blob): Promise<Uint8Array> {
-  return new Uint8Array(await blob.arrayBuffer());
-}
 
 const mapRevision = (docId: string, data: Record<string, unknown>) => ({
   id: docId,
@@ -124,15 +119,42 @@ export async function subirEvidencias(
   revisionId: string,
   archivos: File[]
 ): Promise<Evidencia[]> {
-  return uploadEvidenceBatch({
-    documentId: revisionId,
-    documentIdField: 'revisionId',
-    storagePrefix: 'evidencias',
-    registerCallable: 'registerRevisionEvidence',
+  await ensureOperationalSession(['admin', 'logistica']);
+
+  const inlineFiles = await prepareEvidenceFilesForCallable({
     files: archivos,
     buildNombre: (index) => `Evidencia ${index + 1}`,
     buildDescripcion: (index) => `Fotografía de revisión ${index + 1}`,
   });
+
+  const response = await callCallable<
+    {
+      revisionId: string;
+      inlineFiles: Array<{
+        nombre: string;
+        descripcion?: string;
+        contentType: 'image/jpeg' | 'image/png';
+        dataBase64: string;
+      }>;
+    },
+    {
+      evidences: Array<{
+        id: string;
+        nombre: string;
+        descripcion?: string;
+        storagePath: string;
+        subidaEn: string;
+      }>;
+    }
+  >('registerRevisionEvidence', {
+    revisionId,
+    inlineFiles,
+  });
+
+  return response.evidences.map((evidencia) => ({
+    ...evidencia,
+    subidaEn: new Date(evidencia.subidaEn),
+  }));
 }
 
 export async function subirEvidencia(
@@ -141,17 +163,42 @@ export async function subirEvidencia(
   nombre: string,
   descripcion?: string
 ): Promise<Evidencia> {
-  const evidencias = await uploadEvidenceBatch({
-    documentId: revisionId,
-    documentIdField: 'revisionId',
-    storagePrefix: 'evidencias',
-    registerCallable: 'registerRevisionEvidence',
+  await ensureOperationalSession(['admin', 'logistica']);
+
+  const inlineFiles = await prepareEvidenceFilesForCallable({
     files: [archivo],
     buildNombre: () => nombre,
     buildDescripcion: () => descripcion,
   });
 
-  return evidencias[0];
+  const response = await callCallable<
+    {
+      revisionId: string;
+      inlineFiles: Array<{
+        nombre: string;
+        descripcion?: string;
+        contentType: 'image/jpeg' | 'image/png';
+        dataBase64: string;
+      }>;
+    },
+    {
+      evidences: Array<{
+        id: string;
+        nombre: string;
+        descripcion?: string;
+        storagePath: string;
+        subidaEn: string;
+      }>;
+    }
+  >('registerRevisionEvidence', {
+    revisionId,
+    inlineFiles,
+  });
+
+  return {
+    ...response.evidences[0],
+    subidaEn: new Date(response.evidences[0].subidaEn),
+  };
 }
 
 export async function firmarComoRevisor(
@@ -161,17 +208,11 @@ export async function firmarComoRevisor(
 ): Promise<void> {
   await ensureOperationalSession(['admin', 'logistica']);
 
-  const blob = await (await fetch(firmaDataUrl)).blob();
-  const storagePath = `firmas/${revisionId}/revisor.png`;
-  const storageRef = ref(storage, storagePath);
-
-  await uploadBytes(storageRef, await toUploadBytes(blob), { contentType: 'image/png' });
-
-  await callCallable<{ revisionId: string; storagePath: string }, { ok: boolean }>(
+  await callCallable<{ revisionId: string; signatureDataUrl: string }, { ok: boolean }>(
     'registerReviewerSignature',
     {
       revisionId,
-      storagePath,
+      signatureDataUrl: firmaDataUrl,
     }
   );
 }
@@ -188,18 +229,12 @@ export async function firmarComoCustodio(
 
   await ensureOperationalSession(['custodio']);
 
-  const blob = await (await fetch(firmaDataUrl)).blob();
-  const storagePath = `firmas/${revisionId}/custodio.png`;
-  const storageRef = ref(storage, storagePath);
-
-  await uploadBytes(storageRef, await toUploadBytes(blob), { contentType: 'image/png' });
-
   await callCallable<
-    { revisionId: string; storagePath: string; nombre: string; cedula: string },
+    { revisionId: string; signatureDataUrl: string; nombre: string; cedula: string },
     { ok: boolean }
   >('registerCustodianSignature', {
     revisionId,
-    storagePath,
+    signatureDataUrl: firmaDataUrl,
     nombre: datosFirmante.nombre.trim(),
     cedula: datosFirmante.cedula.trim(),
   });

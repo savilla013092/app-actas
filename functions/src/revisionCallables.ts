@@ -53,6 +53,171 @@ interface UpdateRevisionDraftPayload {
   observaciones?: string;
 }
 
+interface InlineRevisionEvidencePayload {
+  nombre?: string;
+  descripcion?: string;
+  contentType?: string;
+  dataBase64?: string;
+}
+
+const SUPPORTED_INLINE_IMAGE_TYPES = new Set(['image/jpeg', 'image/png']);
+const MAX_INLINE_EVIDENCE_BYTES = 5 * 1024 * 1024;
+const MAX_INLINE_SIGNATURE_BYTES = 500 * 1024;
+
+function sanitizeStorageFileName(fileName: string, contentType: string): string {
+  const cleanedBaseName = fileName
+    .replace(/\.[^.]+$/, '')
+    .replace(/[^a-zA-Z0-9_-]+/g, '-')
+    .replace(/-+/g, '-')
+    .replace(/^-|-$/g, '')
+    .toLowerCase();
+  const extension = contentType === 'image/png' ? 'png' : 'jpg';
+
+  return `${cleanedBaseName || 'evidencia'}.${extension}`;
+}
+
+function decodeBase64Payload(dataBase64: string, invalidMessage: string): Buffer {
+  const normalized = dataBase64.trim();
+
+  if (!normalized) {
+    throw new functions.https.HttpsError('invalid-argument', invalidMessage);
+  }
+
+  try {
+    const buffer = Buffer.from(normalized, 'base64');
+    if (buffer.length === 0) {
+      throw new Error('EMPTY_BUFFER');
+    }
+
+    return buffer;
+  } catch (error) {
+    throw new functions.https.HttpsError('invalid-argument', invalidMessage, String(error));
+  }
+}
+
+function parseSignatureDataUrl(dataUrl: string): { buffer: Buffer; contentType: string } {
+  const match = dataUrl.match(/^data:(image\/png);base64,(.+)$/);
+  if (!match) {
+    throw new functions.https.HttpsError(
+      'invalid-argument',
+      'La firma debe enviarse en formato PNG base64.'
+    );
+  }
+
+  const [, contentType, rawBase64] = match;
+  const buffer = decodeBase64Payload(rawBase64, 'La firma suministrada no es valida.');
+  if (buffer.length > MAX_INLINE_SIGNATURE_BYTES) {
+    throw new functions.https.HttpsError(
+      'failed-precondition',
+      'La firma supera el tamano maximo permitido.'
+    );
+  }
+
+  return { buffer, contentType };
+}
+
+async function storeInlineRevisionEvidenceFiles(
+  revisionId: string,
+  evidences: InlineRevisionEvidencePayload[]
+): Promise<UploadedFilePayload[]> {
+  const bucket = admin.storage().bucket();
+  const uploadedStoragePaths: string[] = [];
+  const uploadedFiles: UploadedFilePayload[] = [];
+
+  try {
+    for (let index = 0; index < evidences.length; index += 1) {
+      const evidence = evidences[index];
+      const contentType = evidence.contentType?.trim();
+
+      if (!contentType || !SUPPORTED_INLINE_IMAGE_TYPES.has(contentType)) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'Las evidencias solo admiten imagenes JPG o PNG.'
+        );
+      }
+
+      if (!evidence.dataBase64) {
+        throw new functions.https.HttpsError(
+          'invalid-argument',
+          'Falta el contenido de una de las evidencias.'
+        );
+      }
+
+      const buffer = decodeBase64Payload(
+        evidence.dataBase64,
+        'No fue posible procesar una de las evidencias cargadas.'
+      );
+
+      if (buffer.length > MAX_INLINE_EVIDENCE_BYTES) {
+        throw new functions.https.HttpsError(
+          'failed-precondition',
+          'Una de las evidencias supera el tamano maximo permitido.'
+        );
+      }
+
+      const nombre = evidence.nombre?.trim() || `Evidencia ${index + 1}`;
+      const fileName = `${Date.now()}-${index + 1}-${sanitizeStorageFileName(nombre, contentType)}`;
+      const storagePath = `evidencias/${revisionId}/${fileName}`;
+
+      await bucket.file(storagePath).save(buffer, {
+        metadata: {
+          contentType,
+        },
+      });
+
+      uploadedStoragePaths.push(storagePath);
+      uploadedFiles.push({
+        id: fileName,
+        storagePath,
+        nombre,
+        descripcion: evidence.descripcion?.trim(),
+      });
+    }
+
+    return uploadedFiles;
+  } catch (error) {
+    await Promise.allSettled(
+      uploadedStoragePaths.map((storagePath) =>
+        bucket.file(storagePath).delete({ ignoreNotFound: true })
+      )
+    );
+
+    if (error instanceof functions.https.HttpsError) {
+      throw error;
+    }
+
+    throw new functions.https.HttpsError(
+      'internal',
+      'No fue posible almacenar las evidencias de la revision.'
+    );
+  }
+}
+
+async function storeRevisionSignatureFromDataUrl(
+  revisionId: string,
+  target: 'revisor' | 'custodio',
+  signatureDataUrl: string
+): Promise<string> {
+  const { buffer, contentType } = parseSignatureDataUrl(signatureDataUrl);
+  const storagePath = `firmas/${revisionId}/${target}.png`;
+
+  try {
+    await admin.storage().bucket().file(storagePath).save(buffer, {
+      metadata: {
+        contentType,
+      },
+    });
+  } catch (error) {
+    throw new functions.https.HttpsError(
+      'internal',
+      'No fue posible almacenar la firma de la revision.',
+      String(error)
+    );
+  }
+
+  return storagePath;
+}
+
 export const createRevisionDraft = functions.region(REGION).https.onCall(async (data, context) => {
   const actor = ensureRole(context, ['admin', 'logistica']);
   const payload = data as RevisionDraftPayload;
@@ -152,7 +317,7 @@ export const updateRevisionDraft = functions.region(REGION).https.onCall(async (
   const revisionRef = db.collection('revisiones').doc(payload.revisionId);
   const revisionSnapshot = await revisionRef.get();
   if (!revisionSnapshot.exists) {
-    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+    throw new functions.https.HttpsError('not-found', 'La revision ya no existe.');
   }
 
   const revision = revisionSnapshot.data() as Record<string, unknown>;
@@ -219,7 +384,7 @@ export const updateRevisionDraft = functions.region(REGION).https.onCall(async (
     documentoId: payload.revisionId,
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: 'Se actualizó un borrador de revisión.',
+    descripcion: 'Se actualizo un borrador de revision.',
   });
 
   return { ok: true };
@@ -227,34 +392,65 @@ export const updateRevisionDraft = functions.region(REGION).https.onCall(async (
 
 export const registerRevisionEvidence = functions.region(REGION).https.onCall(async (data, context) => {
   const actor = ensureRole(context, ['admin', 'logistica']);
-  const payload = data as { revisionId?: string; evidences?: UploadedFilePayload[] };
+  const payload = data as {
+    revisionId?: string;
+    evidences?: UploadedFilePayload[];
+    inlineFiles?: InlineRevisionEvidencePayload[];
+  };
 
-  if (!payload.revisionId || !Array.isArray(payload.evidences) || payload.evidences.length === 0) {
-    throw new functions.https.HttpsError('invalid-argument', 'Debe indicar la revisión y las evidencias.');
+  if (!payload.revisionId) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debe indicar la revision y las evidencias.');
+  }
+
+  const hasStoredFiles = Array.isArray(payload.evidences) && payload.evidences.length > 0;
+  const hasInlineFiles = Array.isArray(payload.inlineFiles) && payload.inlineFiles.length > 0;
+
+  if (!hasStoredFiles && !hasInlineFiles) {
+    throw new functions.https.HttpsError('invalid-argument', 'Debe indicar la revision y las evidencias.');
   }
 
   const revisionRef = db.collection('revisiones').doc(payload.revisionId);
   const revisionSnapshot = await revisionRef.get();
   if (!revisionSnapshot.exists) {
-    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+    throw new functions.https.HttpsError('not-found', 'La revision ya no existe.');
   }
 
   const revision = revisionSnapshot.data() as { estado?: ActaWorkflowState; evidencias?: unknown[] };
   if (revision.estado !== 'borrador' && revision.estado !== 'pendiente_firma_custodio') {
-    throw new functions.https.HttpsError('failed-precondition', 'La revisión no admite nuevas evidencias.');
+    throw new functions.https.HttpsError('failed-precondition', 'La revision no admite nuevas evidencias.');
   }
 
-  payload.evidences.forEach((file) => ensureStoragePath(file.storagePath, `evidencias/${payload.revisionId}/`));
+  const uploadedFiles = hasInlineFiles
+    ? await storeInlineRevisionEvidenceFiles(payload.revisionId, payload.inlineFiles || [])
+    : (payload.evidences || []);
 
-  const updatedEvidences = [...(revision.evidencias || []), ...mapUploadedEvidence(payload.evidences)];
+  uploadedFiles.forEach((file) => ensureStoragePath(file.storagePath, `evidencias/${payload.revisionId}/`));
 
-  await revisionRef.update({
-    evidencias: updatedEvidences,
-    actualizadoEn: serverTimestamp(),
-    actualizadoPor: actor.uid,
-  });
+  const mappedEvidences = mapUploadedEvidence(uploadedFiles);
+  const updatedEvidences = [...(revision.evidencias || []), ...mappedEvidences];
 
-  return { count: updatedEvidences.length };
+  try {
+    await revisionRef.update({
+      evidencias: updatedEvidences,
+      actualizadoEn: serverTimestamp(),
+      actualizadoPor: actor.uid,
+    });
+  } catch (error) {
+    if (hasInlineFiles) {
+      await Promise.allSettled(
+        uploadedFiles.map((file) =>
+          admin.storage().bucket().file(file.storagePath).delete({ ignoreNotFound: true })
+        )
+      );
+    }
+
+    throw error;
+  }
+
+  return {
+    count: updatedEvidences.length,
+    evidences: mappedEvidences,
+  };
 });
 
 export const deleteRevisionDraftEvidence = functions.region(REGION).https.onCall(async (data, context) => {
@@ -264,14 +460,14 @@ export const deleteRevisionDraftEvidence = functions.region(REGION).https.onCall
   if (!payload.revisionId || !payload.evidenceId) {
     throw new functions.https.HttpsError(
       'invalid-argument',
-      'Debe indicar la revisión y la evidencia a eliminar.'
+      'Debe indicar la revision y la evidencia a eliminar.'
     );
   }
 
   const revisionRef = db.collection('revisiones').doc(payload.revisionId);
   const revisionSnapshot = await revisionRef.get();
   if (!revisionSnapshot.exists) {
-    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+    throw new functions.https.HttpsError('not-found', 'La revision ya no existe.');
   }
 
   const revision = revisionSnapshot.data() as {
@@ -316,7 +512,7 @@ export const deleteRevisionDraftEvidence = functions.region(REGION).https.onCall
     documentoId: payload.revisionId,
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: 'Se eliminó una evidencia de un borrador de revisión.',
+    descripcion: 'Se elimino una evidencia de un borrador de revision.',
   });
 
   return { ok: true };
@@ -324,33 +520,46 @@ export const deleteRevisionDraftEvidence = functions.region(REGION).https.onCall
 
 export const registerReviewerSignature = functions.region(REGION).https.onCall(async (data, context) => {
   const actor = ensureRole(context, ['admin', 'logistica']);
-  const payload = data as { revisionId?: string; storagePath?: string; url?: string };
+  const payload = data as {
+    revisionId?: string;
+    storagePath?: string;
+    signatureDataUrl?: string;
+    url?: string;
+  };
 
-  if (!payload.revisionId || !payload.storagePath) {
+  if (!payload.revisionId || (!payload.storagePath && !payload.signatureDataUrl)) {
     throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del revisor.');
   }
-
-  ensureStoragePath(payload.storagePath, `firmas/${payload.revisionId}/`);
 
   const revisionRef = db.collection('revisiones').doc(payload.revisionId);
   const revisionSnapshot = await revisionRef.get();
   if (!revisionSnapshot.exists) {
-    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+    throw new functions.https.HttpsError('not-found', 'La revision ya no existe.');
   }
 
   const revision = revisionSnapshot.data() as Record<string, unknown>;
   if (revision.estado !== 'borrador') {
-    throw new functions.https.HttpsError('failed-precondition', 'La revisión ya no está en borrador.');
+    throw new functions.https.HttpsError('failed-precondition', 'La revision ya no esta en borrador.');
   }
 
   if (revision.revisorId !== actor.uid && getContextRole(context) !== 'admin') {
     throw new functions.https.HttpsError('permission-denied', 'Solo el revisor asignado puede firmar este borrador.');
   }
 
+  const storagePath = payload.storagePath
+    ? payload.storagePath
+    : await storeRevisionSignatureFromDataUrl(
+        payload.revisionId,
+        'revisor',
+        payload.signatureDataUrl || ''
+      );
+
+  ensureStoragePath(storagePath, `firmas/${payload.revisionId}/`);
+
   const { ipCliente, userAgent } = getClientMetadata(context);
   const firma = stripUndefinedDeep({
     ...(payload.url ? { url: payload.url } : {}),
-    storagePath: payload.storagePath,
+    storagePath,
     fechaFirma: new Date().toISOString(),
     ipCliente,
     userAgent,
@@ -373,36 +582,45 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
   const payload = data as {
     revisionId?: string;
     storagePath?: string;
+    signatureDataUrl?: string;
     url?: string;
     nombre?: string;
     cedula?: string;
   };
 
-  if (!payload.revisionId || !payload.storagePath || !payload.nombre || !payload.cedula) {
+  if (!payload.revisionId || (!payload.storagePath && !payload.signatureDataUrl) || !payload.nombre || !payload.cedula) {
     throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del custodio.');
   }
-
-  ensureStoragePath(payload.storagePath, `firmas/${payload.revisionId}/`);
 
   const revisionRef = db.collection('revisiones').doc(payload.revisionId);
   const revisionSnapshot = await revisionRef.get();
   if (!revisionSnapshot.exists) {
-    throw new functions.https.HttpsError('not-found', 'La revisión ya no existe.');
+    throw new functions.https.HttpsError('not-found', 'La revision ya no existe.');
   }
 
   const revision = revisionSnapshot.data() as Record<string, unknown>;
   if (revision.estado !== 'pendiente_firma_custodio') {
-    throw new functions.https.HttpsError('failed-precondition', 'La revisión no está esperando la firma del custodio.');
+    throw new functions.https.HttpsError('failed-precondition', 'La revision no esta esperando la firma del custodio.');
   }
 
   if (revision.custodioId !== actor.uid) {
-    throw new functions.https.HttpsError('permission-denied', 'Solo el custodio titular puede firmar esta revisión.');
+    throw new functions.https.HttpsError('permission-denied', 'Solo el custodio titular puede firmar esta revision.');
   }
+
+  const storagePath = payload.storagePath
+    ? payload.storagePath
+    : await storeRevisionSignatureFromDataUrl(
+        payload.revisionId,
+        'custodio',
+        payload.signatureDataUrl || ''
+      );
+
+  ensureStoragePath(storagePath, `firmas/${payload.revisionId}/`);
 
   const { ipCliente, userAgent } = getClientMetadata(context);
   const firma = stripUndefinedDeep({
     ...(payload.url ? { url: payload.url } : {}),
-    storagePath: payload.storagePath,
+    storagePath,
     fechaFirma: new Date().toISOString(),
     ipCliente,
     userAgent,
@@ -425,8 +643,9 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
     documentoId: payload.revisionId,
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: 'La revisión fue firmada por el custodio titular.',
+    descripcion: 'La revision fue firmada por el custodio titular.',
   });
 
   return { ok: true };
 });
+

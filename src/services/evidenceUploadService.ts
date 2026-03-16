@@ -69,6 +69,13 @@ interface StorageUploadPayload {
   size: number;
 }
 
+export interface InlineCallableEvidenceFile {
+  nombre: string;
+  descripcion?: string;
+  contentType: SupportedImageType;
+  dataBase64: string;
+}
+
 export interface UploadedEvidenceFile {
   id: string;
   storagePath: string;
@@ -319,6 +326,43 @@ async function buildStorageUploadPayload(file: Blob): Promise<StorageUploadPaylo
       { cause: error }
     );
   }
+}
+
+function encodeBytesToBase64(bytes: Uint8Array): string {
+  let binary = '';
+  const chunkSize = 0x8000;
+
+  for (let index = 0; index < bytes.length; index += chunkSize) {
+    const chunk = bytes.subarray(index, index + chunkSize);
+    binary += String.fromCharCode(...Array.from(chunk));
+  }
+
+  return btoa(binary);
+}
+
+export async function prepareEvidenceFilesForCallable({
+  files,
+  buildNombre,
+  buildDescripcion,
+}: Pick<UploadFilesToStorageOptions, 'files' | 'buildNombre' | 'buildDescripcion'>): Promise<
+  InlineCallableEvidenceFile[]
+> {
+  const preparedFiles: InlineCallableEvidenceFile[] = [];
+
+  for (let index = 0; index < files.length; index += 1) {
+    const normalizedFile = await normalizeImageFile(files[index]);
+    const compressedFile = await compressEvidenceFile(normalizedFile);
+    const uploadPayload = await buildStorageUploadPayload(compressedFile);
+
+    preparedFiles.push({
+      nombre: buildNombre(index, normalizedFile.file),
+      descripcion: buildDescripcion?.(index, normalizedFile.file),
+      contentType: normalizedFile.contentType,
+      dataBase64: encodeBytesToBase64(uploadPayload.bytes),
+    });
+  }
+
+  return preparedFiles;
 }
 
 async function uploadFilesToStorageOnce({
