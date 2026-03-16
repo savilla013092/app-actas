@@ -344,7 +344,7 @@ export default function RevisionesPage() {
                     </div>
                     <Button variant='outline' size='sm'>
                       {canSignPendingRevisions && revision.estado === 'pendiente_firma_custodio'
-                        ? 'Firmar'
+                        ? 'Firmar como custodio'
                         : revision.estado === 'borrador' && canSeeAllRevisions
                         ? 'Editar borrador'
                         : 'Ver detalle'}
@@ -369,7 +369,7 @@ export default function RevisionesPage() {
           <p className='font-medium text-muted-foreground'>No se encontraron revisiones</p>
           <p className='mt-1 text-sm text-muted-foreground'>
             {canSignPendingRevisions
-              ? 'No tienes revisiones pendientes de firma.'
+              ? 'No tienes revisiones listas para firma del custodio.'
               : 'Intenta ajustar la busqueda o los filtros.'}
           </p>
           {isLogistica() && (

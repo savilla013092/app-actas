@@ -1,8 +1,10 @@
 ﻿'use client';
 
 import Image from 'next/image';
+import { Suspense } from 'react';
 
 import { LoginForm } from '@/components/forms/LoginForm';
+import { Spinner } from '@/components/ui/spinner';
 
 export default function LoginPage() {
   return (
@@ -59,7 +61,15 @@ export default function LoginPage() {
                 <p className='mt-1 text-muted-foreground'>Ingrese sus credenciales para continuar.</p>
               </div>
 
-              <LoginForm />
+              <Suspense
+                fallback={
+                  <div className='flex min-h-40 items-center justify-center'>
+                    <Spinner size='lg' />
+                  </div>
+                }
+              >
+                <LoginForm />
+              </Suspense>
             </div>
 
             <div className='border-t border-border/50 bg-muted/30 px-8 py-5'>

@@ -1,7 +1,7 @@
 ﻿'use client';
 
 import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInWithEmailAndPassword } from 'firebase/auth';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -20,12 +20,24 @@ const loginSchema = z.object({
 
 type LoginFormData = z.infer<typeof loginSchema>;
 
+function sanitizeNextPath(nextPath: string | null): string {
+  if (!nextPath || !nextPath.startsWith('/')) {
+    return '/dashboard';
+  }
+
+  return nextPath;
+}
+
 export function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [configStatus, setConfigStatus] = useState<'checking' | 'ok' | 'error'>('checking');
+  const [sessionRedirect, setSessionRedirect] = useState<string | null>(null);
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user: authUser, loading: authLoading } = useAuth();
+  const redirectTarget = sanitizeNextPath(searchParams.get('next') ?? sessionRedirect);
+  const isRevisionRedirect = redirectTarget.startsWith('/revision/');
 
   const {
     register,
@@ -50,10 +62,22 @@ export function LoginForm() {
   }, []);
 
   useEffect(() => {
-    if (!authLoading && authUser) {
-      router.push('/dashboard');
+    if (typeof window === 'undefined') {
+      return;
     }
-  }, [authLoading, authUser, router]);
+
+    setSessionRedirect(window.sessionStorage.getItem('postLoginRedirect'));
+  }, []);
+
+  useEffect(() => {
+    if (!authLoading && authUser) {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.removeItem('postLoginRedirect');
+      }
+
+      router.replace(redirectTarget);
+    }
+  }, [authLoading, authUser, redirectTarget, router]);
 
   const onSubmit = async (data: LoginFormData) => {
     setError(null);
@@ -108,6 +132,12 @@ export function LoginForm() {
       {configStatus === 'error' ? (
         <div className='rounded border border-yellow-200 bg-yellow-50 p-3 text-sm text-yellow-800'>
           <strong>Configuración incompleta:</strong> faltan variables de entorno de Firebase. Revise la configuración del entorno activo.
+        </div>
+      ) : null}
+
+      {isRevisionRedirect ? (
+        <div className='rounded border border-sky-200 bg-sky-50 p-3 text-sm text-sky-800'>
+          Despues de ingresar, continuara directamente con la revision pendiente de firma.
         </div>
       ) : null}
 

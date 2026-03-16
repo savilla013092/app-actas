@@ -1,8 +1,9 @@
 ﻿'use client';
 
+import { signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { useParams } from 'next/navigation';
+import { useParams, useRouter } from 'next/navigation';
 import {
   LucideBox,
   LucideCheckCircle,
@@ -23,12 +24,17 @@ import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/useAuth';
+import { auth } from '@/lib/firebase/config';
 import { firmarComoCustodio, obtenerRevision } from '@/services/revisionService';
-import { getOperationalSessionErrorDescription } from '@/services/sessionService';
+import {
+  getOperationalSessionErrorDescription,
+  refreshSessionClaims,
+} from '@/services/sessionService';
 import { Revision } from '@/types/revision';
 
 export default function RevisionDetailPage() {
   const { id } = useParams();
+  const router = useRouter();
   const { user, isAdmin, isCustodio, isLogistica } = useAuth();
   const [revision, setRevision] = useState<Revision | null>(null);
   const [loading, setLoading] = useState(true);
@@ -53,6 +59,19 @@ export default function RevisionDetailPage() {
 
     void loadData();
   }, [id]);
+
+  useEffect(() => {
+    if (!revision || revision.estado !== 'pendiente_firma_custodio' || user?.accessStatus !== 'ready') {
+      return;
+    }
+
+    void refreshSessionClaims().catch((error) => {
+      console.warn('No fue posible refrescar la sesion operativa antes de la firma del custodio.', {
+        revisionId: revision.id,
+        error,
+      });
+    });
+  }, [revision, user?.accessStatus]);
 
   const handleFirmaCustodio = async (
     firmaDataUrl: string,
@@ -98,6 +117,10 @@ export default function RevisionDetailPage() {
   const canSign =
     revision.estado === 'pendiente_firma_custodio' && isCustodio() && revision.custodioId === user?.uid;
   const canEditDraft = revision.estado === 'borrador' && (isAdmin() || isLogistica());
+  const needsCustodianHandoff = revision.estado === 'pendiente_firma_custodio' && !canSign;
+  const isWrongCustodian =
+    revision.estado === 'pendiente_firma_custodio' && isCustodio() && revision.custodioId !== user?.uid;
+  const nextLoginTarget = `/auth/login?next=${encodeURIComponent(`/revision/${revision.id}`)}`;
 
   const breadcrumbItems = [
     { label: 'Revisiones', href: '/revision', icon: <LucideFileText size={14} /> },
@@ -133,6 +156,15 @@ export default function RevisionDetailPage() {
     });
   }
 
+  if (needsCustodianHandoff) {
+    actions.push({
+      label: 'Cambiar de usuario',
+      onClick: () => void handleSwitchToCustodian(),
+      icon: <LucideUser size={18} />,
+      variant: 'outline',
+    });
+  }
+
   const getEstadoBadgeVariant = () => {
     switch (revision.estado) {
       case 'completada':
@@ -147,6 +179,56 @@ export default function RevisionDetailPage() {
         return 'outline';
     }
   };
+
+  const handleSwitchToCustodian = async () => {
+    try {
+      if (typeof window !== 'undefined') {
+        window.sessionStorage.setItem('postLoginRedirect', `/revision/${revision.id}`);
+      }
+
+      await signOut(auth);
+      router.push(nextLoginTarget);
+    } catch (error) {
+      console.error('Error switching to custodian session:', error);
+      toast({
+        title: 'No fue posible cambiar de usuario',
+        description: 'Cierre sesion e intente nuevamente para continuar con la firma del custodio.',
+        variant: 'destructive',
+      });
+    }
+  };
+
+  const renderCustodianMessage = () => {
+    if (canSign) {
+      return {
+        title: 'Revision lista para su firma',
+        description:
+          'La firma del revisor ya fue registrada. Puede continuar como custodio titular desde esta misma pantalla.',
+      };
+    }
+
+    if (isWrongCustodian) {
+      return {
+        title: 'Firma restringida a otro custodio',
+        description: `Esta revision solo puede ser firmada por ${revision.custodioNombre}. Su sesion no corresponde al custodio titular asignado.`,
+      };
+    }
+
+    if (isAdmin() || isLogistica()) {
+      return {
+        title: 'Pendiente firma del custodio',
+        description: `La firma del revisor ya quedo registrada. Para completar el acta, cierre esta sesion e ingrese con ${revision.custodioNombre}.`,
+      };
+    }
+
+    return {
+      title: 'Cambio de usuario requerido',
+      description: `Esta revision esta reservada para la firma de ${revision.custodioNombre}. Ingrese con esa cuenta para continuar.`,
+    };
+  };
+
+  const custodianMessage =
+    revision.estado === 'pendiente_firma_custodio' ? renderCustodianMessage() : null;
 
   return (
     <div className='mx-auto max-w-4xl space-y-8'>
@@ -319,6 +401,38 @@ export default function RevisionDetailPage() {
                 Este borrador todavía puede editarse. Puede corregir fecha, custodio, descripción,
                 observaciones y evidencias hasta que el revisor registre su firma.
               </p>
+            </Card>
+          ) : null}
+
+          {custodianMessage ? (
+            <Card className='space-y-4 border-border/50 p-6 shadow-elegant'>
+              <div>
+                <h3 className='text-base font-semibold text-foreground'>{custodianMessage.title}</h3>
+                <p className='mt-2 text-sm text-muted-foreground'>{custodianMessage.description}</p>
+              </div>
+
+              <div className='rounded-lg border border-border/50 bg-muted/50 p-4 text-sm text-foreground'>
+                <p>
+                  <strong>Custodio titular:</strong> {revision.custodioNombre}
+                </p>
+                <p>
+                  <strong>Cedula registrada:</strong> {revision.custodioCedula}
+                </p>
+              </div>
+
+              {canSign ? (
+                <Button onClick={() => setShowSignaturePad(true)} variant='warning' className='w-full'>
+                  Firmar acta como custodio
+                </Button>
+              ) : (
+                <Button
+                  onClick={() => void handleSwitchToCustodian()}
+                  variant='outline'
+                  className='w-full'
+                >
+                  Cerrar sesion y continuar con custodio
+                </Button>
+              )}
             </Card>
           ) : null}
         </div>

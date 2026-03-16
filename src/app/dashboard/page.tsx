@@ -367,11 +367,11 @@ export default function DashboardPage() {
                       <div>
                         <p className='text-sm font-semibold text-foreground'>{revision.codigoActivo}</p>
                         <p className='text-xs text-muted-foreground'>
-                          {isCustodian ? 'Pendiente tu firma' : `Firma de ${revision.custodioNombre}`}
+                          {isCustodian ? 'Lista para tu firma como custodio' : `Pendiente firma de ${revision.custodioNombre}`}
                         </p>
                       </div>
                       <Button variant='outline' size='sm' className='border-amber-200 text-amber-700 hover:bg-amber-100'>
-                        {isCustodian ? 'Firmar' : 'Ver'}
+                        {isCustodian ? 'Firmar como custodio' : 'Ver acta'}
                       </Button>
                     </div>
                   </div>
