@@ -40,6 +40,9 @@ const consecutivos_1 = require("./consecutivos");
 const generarActaAsignacionPDF_1 = require("./generarActaAsignacionPDF");
 const generarActaPDF_1 = require("./generarActaPDF");
 const security_1 = require("./security");
+function hasStoredFileReference(file) {
+    return Boolean((file === null || file === void 0 ? void 0 : file.storagePath) || (file === null || file === void 0 ? void 0 : file.url));
+}
 exports.onUsuarioWriteSyncClaims = functions.region(security_1.REGION).firestore
     .document('usuarios/{userId}')
     .onWrite(async (change, context) => {
@@ -71,14 +74,14 @@ exports.onActivoWriteSyncSearch = functions.region(security_1.REGION).firestore
 exports.onRevisionFirmadaCompleta = functions.region(security_1.REGION).firestore
     .document('revisiones/{revisionId}')
     .onUpdate(async (change, context) => {
-    var _a, _b;
     const beforeData = change.before.data();
     const afterData = change.after.data();
     const revisionId = context.params.revisionId;
     if (beforeData.estado === 'firmada_completa' || afterData.estado !== 'firmada_completa') {
         return null;
     }
-    if (!((_a = afterData.firmaRevisor) === null || _a === void 0 ? void 0 : _a.url) || !((_b = afterData.firmaCustodio) === null || _b === void 0 ? void 0 : _b.url)) {
+    if (!hasStoredFileReference(afterData.firmaRevisor) ||
+        !hasStoredFileReference(afterData.firmaCustodio)) {
         console.error('La revisión firmada no tiene ambas firmas.', revisionId);
         return null;
     }
@@ -128,14 +131,14 @@ exports.onRevisionFirmadaCompleta = functions.region(security_1.REGION).firestor
 exports.onAsignacionFirmadaCompleta = functions.region(security_1.REGION).firestore
     .document('asignaciones/{assignmentId}')
     .onUpdate(async (change, context) => {
-    var _a, _b;
     const beforeData = change.before.data();
     const afterData = change.after.data();
     const assignmentId = context.params.assignmentId;
     if (beforeData.estado === 'firmada_completa' || afterData.estado !== 'firmada_completa') {
         return null;
     }
-    if (!((_a = afterData.firmaRevisor) === null || _a === void 0 ? void 0 : _a.url) || !((_b = afterData.firmaCustodio) === null || _b === void 0 ? void 0 : _b.url)) {
+    if (!hasStoredFileReference(afterData.firmaRevisor) ||
+        !hasStoredFileReference(afterData.firmaCustodio)) {
         console.error('La asignación firmada no tiene ambas firmas.', assignmentId);
         return null;
     }

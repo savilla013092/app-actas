@@ -36,9 +36,14 @@ function deleteFile(storage, path) {
 test('evidencias: solo admin/logistica pueden subir imagenes a revisiones abiertas', async () => {
   const logisticaStorage = storageContext(testEnv, ids.logistica, authClaims.logistica);
   const custodioStorage = storageContext(testEnv, ids.custodio, authClaims.custodio);
+  const staleLogisticaStorage = storageContext(testEnv, ids.logistica, {});
 
   await assertSucceeds(
     uploadFile(logisticaStorage, `evidencias/${ids.revisionDraft}/foto-logistica.jpg`)
+  );
+
+  await assertSucceeds(
+    uploadFile(staleLogisticaStorage, `evidencias/${ids.revisionDraft}/foto-sin-claims.jpg`)
   );
 
   await assertFails(

@@ -18,6 +18,7 @@ const IMAGE_UPLOAD_OPTIONS = {
 };
 
 const STORAGE_CODE_UNAUTHORIZED = 'storage/unauthorized';
+const STORAGE_CODE_UNAUTHENTICATED = 'storage/unauthenticated';
 const STORAGE_CODE_CANCELED = 'storage/canceled';
 const STORAGE_CODE_RETRY_LIMIT = 'storage/retry-limit-exceeded';
 const CALLABLE_CODE_PERMISSION_DENIED = 'functions/permission-denied';
@@ -211,6 +212,7 @@ function classifyStorageError(error: unknown, fallbackMessage: string): Evidence
 
   switch (errorCode) {
     case STORAGE_CODE_UNAUTHORIZED:
+    case STORAGE_CODE_UNAUTHENTICATED:
       return new EvidenceUploadError(
         'upload_unauthorized',
         'Tu sesion no esta habilitada para registrar evidencias. Cierra sesion e ingresa otra vez.',

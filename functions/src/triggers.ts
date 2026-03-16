@@ -16,6 +16,10 @@ import {
   writeAuditLog,
 } from './security';
 
+function hasStoredFileReference(file: { storagePath?: string; url?: string } | undefined) {
+  return Boolean(file?.storagePath || file?.url);
+}
+
 export const onUsuarioWriteSyncClaims = functions.region(REGION).firestore
   .document('usuarios/{userId}')
   .onWrite(async (change, context) => {
@@ -62,7 +66,10 @@ export const onRevisionFirmadaCompleta = functions.region(REGION).firestore
       return null;
     }
 
-    if (!afterData.firmaRevisor?.url || !afterData.firmaCustodio?.url) {
+    if (
+      !hasStoredFileReference(afterData.firmaRevisor) ||
+      !hasStoredFileReference(afterData.firmaCustodio)
+    ) {
       console.error('La revisión firmada no tiene ambas firmas.', revisionId);
       return null;
     }
@@ -127,7 +134,10 @@ export const onAsignacionFirmadaCompleta = functions.region(REGION).firestore
       return null;
     }
 
-    if (!afterData.firmaRevisor?.url || !afterData.firmaCustodio?.url) {
+    if (
+      !hasStoredFileReference(afterData.firmaRevisor) ||
+      !hasStoredFileReference(afterData.firmaCustodio)
+    ) {
       console.error('La asignación firmada no tiene ambas firmas.', assignmentId);
       return null;
     }

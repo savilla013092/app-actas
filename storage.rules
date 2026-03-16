@@ -7,20 +7,25 @@ service firebase.storage {
 
     function hasManagedAccess() {
       return isSignedIn() &&
-        request.auth.token.active == true &&
-        request.auth.token.role is string;
+        firestore.exists(/databases/(default)/documents/usuarios/$(request.auth.uid)) &&
+        currentUserProfile().activo == true &&
+        currentUserProfile().rol is string;
+    }
+
+    function currentUserProfile() {
+      return firestore.get(/databases/(default)/documents/usuarios/$(request.auth.uid)).data;
     }
 
     function isAdmin() {
-      return hasManagedAccess() && request.auth.token.role == 'admin';
+      return hasManagedAccess() && currentUserProfile().rol == 'admin';
     }
 
     function isLogistica() {
-      return hasManagedAccess() && request.auth.token.role == 'logistica';
+      return hasManagedAccess() && currentUserProfile().rol == 'logistica';
     }
 
     function isCustodio() {
-      return hasManagedAccess() && request.auth.token.role == 'custodio';
+      return hasManagedAccess() && currentUserProfile().rol == 'custodio';
     }
 
     function isAdminOrLogistica() {
