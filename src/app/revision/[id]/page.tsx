@@ -24,6 +24,7 @@ import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/useAuth';
 import { firmarComoCustodio, obtenerRevision } from '@/services/revisionService';
+import { getOperationalSessionErrorDescription } from '@/services/sessionService';
 import { Revision } from '@/types/revision';
 
 export default function RevisionDetailPage() {
@@ -72,7 +73,9 @@ export default function RevisionDetailPage() {
       console.error('Error signing revision:', error);
       toast({
         title: 'No fue posible registrar la firma',
-        description: 'Verifique que la revisión siga pendiente y que su perfil corresponda al custodio titular.',
+        description:
+          getOperationalSessionErrorDescription(error) ??
+          'Verifique que la revisión siga pendiente y que su perfil corresponda al custodio titular.',
         variant: 'destructive',
       });
     } finally {

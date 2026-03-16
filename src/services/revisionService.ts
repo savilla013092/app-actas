@@ -17,6 +17,7 @@ import { db, storage } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
 import { resolveStorageDownloadUrl } from '@/services/storageFileService';
 import { uploadEvidenceBatch } from '@/services/evidenceUploadService';
+import { ensureOperationalSession } from '@/services/sessionService';
 import { Evidencia, Revision } from '@/types/revision';
 
 const COLLECTION = 'revisiones';
@@ -154,6 +155,8 @@ export async function firmarComoRevisor(
   firmaDataUrl: string,
   _datosRevision: object
 ): Promise<void> {
+  await ensureOperationalSession(['admin', 'logistica']);
+
   const blob = await (await fetch(firmaDataUrl)).blob();
   const storagePath = `firmas/${revisionId}/revisor.png`;
   const storageRef = ref(storage, storagePath);
@@ -178,6 +181,8 @@ export async function firmarComoCustodio(
   if (!datosFirmante?.nombre?.trim() || !datosFirmante?.cedula?.trim()) {
     throw new Error('FIRMANTE_REQUIRED');
   }
+
+  await ensureOperationalSession(['custodio']);
 
   const blob = await (await fetch(firmaDataUrl)).blob();
   const storagePath = `firmas/${revisionId}/custodio.png`;

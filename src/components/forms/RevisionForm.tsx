@@ -29,6 +29,7 @@ import {
   subirEvidencias,
   type UpdateRevisionDraftPayload,
 } from '@/services/revisionService';
+import { getOperationalSessionErrorDescription } from '@/services/sessionService';
 import { Activo } from '@/types/activo';
 import { Evidencia, Revision } from '@/types/revision';
 import { Usuario } from '@/types/usuario';
@@ -464,7 +465,9 @@ export function RevisionForm({
       console.error('Error registering reviewer signature:', error);
       toast({
         title: 'No fue posible registrar la firma',
-        description: 'La revisión quedó guardada, pero la firma del revisor no se pudo procesar.',
+        description:
+          getOperationalSessionErrorDescription(error) ??
+          'La revisión quedó guardada, pero la firma del revisor no se pudo procesar.',
         variant: 'destructive',
       });
     } finally {

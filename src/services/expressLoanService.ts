@@ -11,6 +11,7 @@
 import { db } from '@/lib/firebase/config';
 import { callCallable } from '@/services/callableService';
 import { cleanupUploadedFiles, uploadFilesToStorage } from '@/services/evidenceUploadService';
+import { ensureOperationalSession } from '@/services/sessionService';
 import {
   CreateExpressLoanDTO,
   ExpressLoan,
@@ -135,6 +136,8 @@ export const createExpressLoan = async (
       subidaEn: new Date().toISOString(),
       storagePath: file.storagePath,
     }));
+
+    await ensureOperationalSession(['admin', 'logistica']);
 
     const response = await callCallable<
       CreateExpressLoanDTO & {
