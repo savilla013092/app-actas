@@ -1,8 +1,6 @@
 'use client';
 
-import { signOut } from 'firebase/auth';
 import Image from 'next/image';
-import { useRouter } from 'next/navigation';
 import { useMemo, useState } from 'react';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -18,7 +16,6 @@ import { Select } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/useAuth';
-import { auth } from '@/lib/firebase/config';
 import { getAssetLocation } from '@/lib/utils/assetLocation';
 import {
   EVIDENCE_FILE_ACCEPT,
@@ -28,6 +25,7 @@ import {
   actualizarBorradorRevision,
   crearRevision,
   eliminarEvidenciaBorradorRevision,
+  firmarComoCustodio,
   firmarComoRevisor,
   subirEvidencias,
   type UpdateRevisionDraftPayload,
@@ -222,7 +220,6 @@ export function RevisionForm({
   custodioSelectionEnabled = true,
   loadWarning = null,
 }: RevisionFormProps) {
-  const router = useRouter();
   const { user } = useAuth();
   const isEditMode = revision !== null;
   const documentId = revision?.id ?? 'nueva-revision';
@@ -256,7 +253,7 @@ export function RevisionForm({
     [documentId, revision?.fecha]
   );
 
-  const [paso, setPaso] = useState<'formulario' | 'evidencias' | 'firma' | 'handoff'>('formulario');
+  const [paso, setPaso] = useState<'formulario' | 'evidencias' | 'firmaRevisor' | 'firmaCustodio'>('formulario');
   const [revisionId, setRevisionId] = useState<string | null>(revision?.id ?? null);
   const [evidencias, setEvidencias] = useState<File[]>([]);
   const [evidenciasExistentes, setEvidenciasExistentes] = useState<Evidencia[]>(revision?.evidencias ?? []);
@@ -309,12 +306,11 @@ export function RevisionForm({
   const selectedCustodio =
     custodioOptions.find((item) => item.id === selectedCustodioId) ?? fallbackCustodio;
   const totalEvidenceCount = evidenciasExistentes.length + evidencias.length;
-  const nextLoginTarget = revisionId ? `/auth/login?next=${encodeURIComponent(`/revision/${revisionId}`)}` : '/auth/login';
   const steps: Array<{ key: typeof paso; label: string }> = [
     { key: 'formulario', label: 'Datos' },
     { key: 'evidencias', label: 'Evidencias' },
-    { key: 'firma', label: 'Firma revisor' },
-    { key: 'handoff', label: 'Firma custodio' },
+    { key: 'firmaRevisor', label: 'Firma revisor' },
+    { key: 'firmaCustodio', label: 'Firma custodio' },
   ];
   const currentStepIndex = steps.findIndex((step) => step.key === paso);
 
@@ -404,7 +400,7 @@ export function RevisionForm({
         return;
       }
 
-      setPaso('firma');
+      setPaso('firmaRevisor');
       return;
     }
 
@@ -414,7 +410,7 @@ export function RevisionForm({
       const nuevasEvidencias = await subirEvidencias(revisionId, evidencias);
       setEvidenciasExistentes((current) => [...current, ...nuevasEvidencias]);
       setEvidencias([]);
-      setPaso('firma');
+      setPaso('firmaRevisor');
     } catch (error) {
       console.error('Error uploading evidences:', error);
       toast({
@@ -472,10 +468,10 @@ export function RevisionForm({
       };
 
       await firmarComoRevisor(revisionId, firmaDataUrl, datosRevision);
-      setPaso('handoff');
+      setPaso('firmaCustodio');
       toast({
         title: 'Firma del revisor registrada',
-        description: `La revision quedo lista para la firma de ${selectedCustodio.nombre}.`,
+        description: `Continua ahora con la firma del custodio ${selectedCustodio.nombre}.`,
       });
     } catch (error) {
       console.error('Error registering reviewer signature:', error);
@@ -499,23 +495,41 @@ export function RevisionForm({
     onSuccess(revisionId);
   };
 
-  const handleSignOutForCustodian = async () => {
+  const handleFirmaCustodio = async (
+    firmaDataUrl: string,
+    datosFirmante?: { nombre: string; cedula: string }
+  ) => {
+    if (!revisionId) {
+      return;
+    }
+
     setLoading(true);
 
     try {
-      if (typeof window !== 'undefined' && revisionId) {
-        window.sessionStorage.setItem('postLoginRedirect', `/revision/${revisionId}`);
-      }
+      const datosRevision = {
+        ...getValues(),
+        activo,
+        custodio: selectedCustodio,
+        revisor: user?.usuario,
+        fecha: new Date().toISOString(),
+      };
 
-      await signOut(auth);
-      router.push(nextLoginTarget);
-    } catch (error) {
-      console.error('Error switching to custodian session:', error);
+      await firmarComoCustodio(revisionId, firmaDataUrl, datosRevision, datosFirmante);
       toast({
-        title: 'No fue posible cambiar de usuario',
-        description: 'Cierre sesion e intente nuevamente para continuar con la firma del custodio.',
+        title: 'Firma del custodio registrada',
+        description: 'La revision quedo firmada correctamente y continuara con la generacion del acta.',
+      });
+      onSuccess(revisionId);
+    } catch (error) {
+      console.error('Error registering custodian signature:', error);
+      toast({
+        title: 'No fue posible registrar la firma del custodio',
+        description:
+          getOperationalSessionErrorDescription(error) ??
+          'Verifique el nombre, la cedula y vuelva a intentar la captura de la firma.',
         variant: 'destructive',
       });
+    } finally {
       setLoading(false);
     }
   };
@@ -718,7 +732,7 @@ export function RevisionForm({
         </div>
       )}
 
-      {paso === 'firma' && user?.usuario ? (
+      {paso === 'firmaRevisor' && user?.usuario ? (
         <SignaturePad
           titulo='Firma del profesional de logística'
           nombreFirmante={user.usuario.nombre}
@@ -729,51 +743,40 @@ export function RevisionForm({
         />
       ) : null}
 
-      {paso === 'handoff' && revisionId ? (
+      {paso === 'firmaCustodio' && revisionId ? (
         <div className='space-y-6'>
           <div className='rounded-xl border border-amber-200 bg-amber-50 p-5 text-sm text-amber-900'>
-            <h3 className='text-base font-semibold text-amber-950'>Firma del revisor completada</h3>
+            <h3 className='text-base font-semibold text-amber-950'>Continúe con la firma del custodio</h3>
             <p className='mt-2'>
-              La revision quedo en estado pendiente de firma del custodio. Para completar el acta,
-              ahora debe ingresar <strong>{selectedCustodio.nombre}</strong> con su propia cuenta.
+              La firma del revisor ya fue registrada. Complete ahora la firma del custodio en esta
+              misma sesion para cerrar la revision.
             </p>
           </div>
 
           <div className='rounded-xl border border-border/50 bg-card p-5 shadow-elegant'>
-            <p className='text-sm font-semibold text-foreground'>Siguiente paso</p>
+            <p className='text-sm font-semibold text-foreground'>Datos del custodio que firma</p>
             <p className='mt-2 text-sm text-muted-foreground'>
-              Puede cerrar esta sesion y volver directamente a esta revision para que el custodio
-              firme, o revisar el detalle del acta antes del cambio de usuario.
+              El custodio debe confirmar su nombre y cédula antes de dibujar la firma.
             </p>
             <div className='mt-4 rounded-lg border border-border/50 bg-muted/50 p-4 text-sm text-foreground'>
               <p>
-                <strong>Custodio requerido:</strong> {selectedCustodio.nombre}
+                <strong>Custodio registrado:</strong> {selectedCustodio.nombre}
               </p>
               <p>
-                <strong>Cedula:</strong> {selectedCustodio.cedula}
+                <strong>Cedula registrada:</strong> {selectedCustodio.cedula}
               </p>
             </div>
           </div>
 
-          <div className='flex flex-col gap-3 sm:flex-row'>
-            <Button
-              type='button'
-              variant='warning'
-              className='flex-1'
-              onClick={() => void handleSignOutForCustodian()}
-              loading={loading}
-            >
-              Cerrar sesion y continuar con custodio
-            </Button>
-            <Button
-              type='button'
-              variant='outline'
-              className='flex-1'
-              onClick={handleOpenRevisionDetail}
-            >
-              Ver detalle de la revision
-            </Button>
-          </div>
+          <SignaturePad
+            titulo='Firma del custodio del activo'
+            nombreFirmante={selectedCustodio.nombre}
+            cedulaFirmante={selectedCustodio.cedula}
+            declaracion='Certifico que la información registrada en esta revisión es veraz y acepto mi responsabilidad sobre el activo descrito en el estado manifestado.'
+            onSave={handleFirmaCustodio}
+            onCancel={handleOpenRevisionDetail}
+            permitirEdicion
+          />
         </div>
       ) : null}
     </div>

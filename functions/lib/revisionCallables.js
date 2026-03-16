@@ -386,7 +386,8 @@ exports.registerReviewerSignature = functions.region(security_1.REGION).https.on
 });
 exports.registerCustodianSignature = functions.region(security_1.REGION).https.onCall(async (data, context) => {
     var _a;
-    const actor = (0, security_1.ensureRole)(context, ['custodio']);
+    const actor = (0, security_1.ensureRole)(context, ['admin', 'logistica', 'custodio']);
+    const actorRole = (0, security_1.getContextRole)(context);
     const payload = data;
     if (!payload.revisionId || (!payload.storagePath && !payload.signatureDataUrl) || !payload.nombre || !payload.cedula) {
         throw new functions.https.HttpsError('invalid-argument', 'Faltan datos de la firma del custodio.');
@@ -400,14 +401,19 @@ exports.registerCustodianSignature = functions.region(security_1.REGION).https.o
     if (revision.estado !== 'pendiente_firma_custodio') {
         throw new functions.https.HttpsError('failed-precondition', 'La revision no esta esperando la firma del custodio.');
     }
-    if (revision.custodioId !== actor.uid) {
+    if (actorRole === 'custodio' && revision.custodioId !== actor.uid) {
         throw new functions.https.HttpsError('permission-denied', 'Solo el custodio titular puede firmar esta revision.');
+    }
+    if (actorRole === 'logistica' &&
+        revision.revisorId !== actor.uid) {
+        throw new functions.https.HttpsError('permission-denied', 'Solo el revisor asignado puede capturar la firma del custodio en esta revision.');
     }
     const storagePath = payload.storagePath
         ? payload.storagePath
         : await storeRevisionSignatureFromDataUrl(payload.revisionId, 'custodio', payload.signatureDataUrl || '');
     (0, security_1.ensureStoragePath)(storagePath, `firmas/${payload.revisionId}/`);
     const { ipCliente, userAgent } = (0, security_1.getClientMetadata)(context);
+    const tipoCaptura = actorRole === 'custodio' ? 'autenticada' : 'asistida';
     const firma = (0, security_1.stripUndefinedDeep)({
         ...(payload.url ? { url: payload.url } : {}),
         storagePath,
@@ -416,6 +422,9 @@ exports.registerCustodianSignature = functions.region(security_1.REGION).https.o
         userAgent,
         hashDocumento: (0, security_1.buildDocumentHash)(revision),
         declaracionAceptada: true,
+        registradaPorId: actor.uid,
+        registradaPorRol: actorRole,
+        tipoCaptura,
     });
     await revisionRef.update({
         firmaCustodio: firma,
@@ -431,7 +440,15 @@ exports.registerCustodianSignature = functions.region(security_1.REGION).https.o
         documentoId: payload.revisionId,
         usuarioId: actor.uid,
         usuarioEmail: (_a = context.auth) === null || _a === void 0 ? void 0 : _a.token.email,
-        descripcion: 'La revision fue firmada por el custodio titular.',
+        descripcion: tipoCaptura === 'autenticada'
+            ? 'La revision fue firmada por el custodio titular.'
+            : 'La firma del custodio fue capturada durante la sesion del revisor.',
+        metadata: {
+            tipoCaptura,
+            actorRol: actorRole,
+            custodioFirmanteNombre: payload.nombre,
+            custodioFirmanteCedula: payload.cedula,
+        },
     });
     return { ok: true };
 });

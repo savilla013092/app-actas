@@ -22,6 +22,9 @@ export interface FirmaDigital {
   userAgent: string;
   hashDocumento: string;
   declaracionAceptada: boolean;
+  registradaPorId?: string;
+  registradaPorRol?: 'admin' | 'logistica' | 'custodio';
+  tipoCaptura?: 'autenticada' | 'asistida';
   geolocalizacion?: {
     latitud: number;
     longitud: number;

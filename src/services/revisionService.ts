@@ -227,7 +227,7 @@ export async function firmarComoCustodio(
     throw new Error('FIRMANTE_REQUIRED');
   }
 
-  await ensureOperationalSession(['custodio']);
+  await ensureOperationalSession(['admin', 'logistica', 'custodio']);
 
   await callCallable<
     { revisionId: string; signatureDataUrl: string; nombre: string; cedula: string },

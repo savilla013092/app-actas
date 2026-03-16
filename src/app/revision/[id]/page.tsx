@@ -1,9 +1,8 @@
 ﻿'use client';
 
-import { signOut } from 'firebase/auth';
 import { useEffect, useState } from 'react';
 import Image from 'next/image';
-import { useParams, useRouter } from 'next/navigation';
+import { useParams } from 'next/navigation';
 import {
   LucideBox,
   LucideCheckCircle,
@@ -24,7 +23,6 @@ import { Card } from '@/components/ui/card';
 import { Spinner } from '@/components/ui/spinner';
 import { toast } from '@/components/ui/toast';
 import { useAuth } from '@/hooks/useAuth';
-import { auth } from '@/lib/firebase/config';
 import { firmarComoCustodio, obtenerRevision } from '@/services/revisionService';
 import {
   getOperationalSessionErrorDescription,
@@ -34,7 +32,6 @@ import { Revision } from '@/types/revision';
 
 export default function RevisionDetailPage() {
   const { id } = useParams();
-  const router = useRouter();
   const { user, isAdmin, isCustodio, isLogistica } = useAuth();
   const [revision, setRevision] = useState<Revision | null>(null);
   const [loading, setLoading] = useState(true);
@@ -114,13 +111,15 @@ export default function RevisionDetailPage() {
     return <div className='py-12 text-center text-red-500'>Revisión no encontrada.</div>;
   }
 
-  const canSign =
-    revision.estado === 'pendiente_firma_custodio' && isCustodio() && revision.custodioId === user?.uid;
+  const canCaptureCustodianSignature =
+    revision.estado === 'pendiente_firma_custodio' &&
+    (isAdmin() ||
+      (isLogistica() && revision.revisorId === user?.uid) ||
+      (isCustodio() && revision.custodioId === user?.uid));
   const canEditDraft = revision.estado === 'borrador' && (isAdmin() || isLogistica());
-  const needsCustodianHandoff = revision.estado === 'pendiente_firma_custodio' && !canSign;
+  const isAssignedReviewer = revision.revisorId === user?.uid;
   const isWrongCustodian =
     revision.estado === 'pendiente_firma_custodio' && isCustodio() && revision.custodioId !== user?.uid;
-  const nextLoginTarget = `/auth/login?next=${encodeURIComponent(`/revision/${revision.id}`)}`;
 
   const breadcrumbItems = [
     { label: 'Revisiones', href: '/revision', icon: <LucideFileText size={14} /> },
@@ -147,21 +146,12 @@ export default function RevisionDetailPage() {
     });
   }
 
-  if (canSign) {
+  if (canCaptureCustodianSignature) {
     actions.push({
-      label: 'Firmar acta',
+      label: 'Registrar firma del custodio',
       onClick: () => setShowSignaturePad(true),
       icon: <LucidePenTool size={18} />,
       variant: 'warning',
-    });
-  }
-
-  if (needsCustodianHandoff) {
-    actions.push({
-      label: 'Cambiar de usuario',
-      onClick: () => void handleSwitchToCustodian(),
-      icon: <LucideUser size={18} />,
-      variant: 'outline',
     });
   }
 
@@ -180,26 +170,16 @@ export default function RevisionDetailPage() {
     }
   };
 
-  const handleSwitchToCustodian = async () => {
-    try {
-      if (typeof window !== 'undefined') {
-        window.sessionStorage.setItem('postLoginRedirect', `/revision/${revision.id}`);
-      }
-
-      await signOut(auth);
-      router.push(nextLoginTarget);
-    } catch (error) {
-      console.error('Error switching to custodian session:', error);
-      toast({
-        title: 'No fue posible cambiar de usuario',
-        description: 'Cierre sesion e intente nuevamente para continuar con la firma del custodio.',
-        variant: 'destructive',
-      });
-    }
-  };
-
   const renderCustodianMessage = () => {
-    if (canSign) {
+    if (canCaptureCustodianSignature && (isAdmin() || (isLogistica() && isAssignedReviewer))) {
+      return {
+        title: 'Captura asistida de firma del custodio',
+        description:
+          'La firma del revisor ya fue registrada. Puede capturar ahora la firma del custodio en esta misma sesion.',
+      };
+    }
+
+    if (canCaptureCustodianSignature) {
       return {
         title: 'Revision lista para su firma',
         description:
@@ -217,13 +197,16 @@ export default function RevisionDetailPage() {
     if (isAdmin() || isLogistica()) {
       return {
         title: 'Pendiente firma del custodio',
-        description: `La firma del revisor ya quedo registrada. Para completar el acta, cierre esta sesion e ingrese con ${revision.custodioNombre}.`,
+        description:
+          isLogistica() && !isAssignedReviewer
+            ? 'Solo el revisor asignado o el custodio titular pueden registrar esta firma.'
+            : `La firma del custodio sigue pendiente para ${revision.custodioNombre}.`,
       };
     }
 
     return {
-      title: 'Cambio de usuario requerido',
-      description: `Esta revision esta reservada para la firma de ${revision.custodioNombre}. Ingrese con esa cuenta para continuar.`,
+      title: 'Firma restringida',
+      description: `Esta revision esta reservada para la firma de ${revision.custodioNombre}.`,
     };
   };
 
@@ -420,18 +403,14 @@ export default function RevisionDetailPage() {
                 </p>
               </div>
 
-              {canSign ? (
+              {canCaptureCustodianSignature ? (
                 <Button onClick={() => setShowSignaturePad(true)} variant='warning' className='w-full'>
-                  Firmar acta como custodio
+                  Registrar firma del custodio
                 </Button>
               ) : (
-                <Button
-                  onClick={() => void handleSwitchToCustodian()}
-                  variant='outline'
-                  className='w-full'
-                >
-                  Cerrar sesion y continuar con custodio
-                </Button>
+                <div className='rounded-lg border border-border/50 bg-muted/50 p-3 text-sm text-muted-foreground'>
+                  La firma aun no puede registrarse desde esta sesion.
+                </div>
               )}
             </Card>
           ) : null}

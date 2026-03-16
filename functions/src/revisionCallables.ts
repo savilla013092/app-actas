@@ -578,7 +578,8 @@ export const registerReviewerSignature = functions.region(REGION).https.onCall(a
 });
 
 export const registerCustodianSignature = functions.region(REGION).https.onCall(async (data, context) => {
-  const actor = ensureRole(context, ['custodio']);
+  const actor = ensureRole(context, ['admin', 'logistica', 'custodio']);
+  const actorRole = getContextRole(context);
   const payload = data as {
     revisionId?: string;
     storagePath?: string;
@@ -603,8 +604,18 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
     throw new functions.https.HttpsError('failed-precondition', 'La revision no esta esperando la firma del custodio.');
   }
 
-  if (revision.custodioId !== actor.uid) {
+  if (actorRole === 'custodio' && revision.custodioId !== actor.uid) {
     throw new functions.https.HttpsError('permission-denied', 'Solo el custodio titular puede firmar esta revision.');
+  }
+
+  if (
+    actorRole === 'logistica' &&
+    revision.revisorId !== actor.uid
+  ) {
+    throw new functions.https.HttpsError(
+      'permission-denied',
+      'Solo el revisor asignado puede capturar la firma del custodio en esta revision.'
+    );
   }
 
   const storagePath = payload.storagePath
@@ -618,6 +629,7 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
   ensureStoragePath(storagePath, `firmas/${payload.revisionId}/`);
 
   const { ipCliente, userAgent } = getClientMetadata(context);
+  const tipoCaptura = actorRole === 'custodio' ? 'autenticada' : 'asistida';
   const firma = stripUndefinedDeep({
     ...(payload.url ? { url: payload.url } : {}),
     storagePath,
@@ -626,6 +638,9 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
     userAgent,
     hashDocumento: buildDocumentHash(revision),
     declaracionAceptada: true,
+    registradaPorId: actor.uid,
+    registradaPorRol: actorRole,
+    tipoCaptura,
   });
 
   await revisionRef.update({
@@ -643,7 +658,16 @@ export const registerCustodianSignature = functions.region(REGION).https.onCall(
     documentoId: payload.revisionId,
     usuarioId: actor.uid,
     usuarioEmail: context.auth?.token.email as string | undefined,
-    descripcion: 'La revision fue firmada por el custodio titular.',
+    descripcion:
+      tipoCaptura === 'autenticada'
+        ? 'La revision fue firmada por el custodio titular.'
+        : 'La firma del custodio fue capturada durante la sesion del revisor.',
+    metadata: {
+      tipoCaptura,
+      actorRol: actorRole,
+      custodioFirmanteNombre: payload.nombre,
+      custodioFirmanteCedula: payload.cedula,
+    },
   });
 
   return { ok: true };
