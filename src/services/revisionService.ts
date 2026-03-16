@@ -23,6 +23,10 @@ import { Evidencia, Revision } from '@/types/revision';
 const COLLECTION = 'revisiones';
 const DEFAULT_PAGE_SIZE = 50;
 
+async function toUploadBytes(blob: Blob): Promise<Uint8Array> {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
 const mapRevision = (docId: string, data: Record<string, unknown>) => ({
   id: docId,
   ...data,
@@ -161,7 +165,7 @@ export async function firmarComoRevisor(
   const storagePath = `firmas/${revisionId}/revisor.png`;
   const storageRef = ref(storage, storagePath);
 
-  await uploadBytes(storageRef, blob, { contentType: 'image/png' });
+  await uploadBytes(storageRef, await toUploadBytes(blob), { contentType: 'image/png' });
 
   await callCallable<{ revisionId: string; storagePath: string }, { ok: boolean }>(
     'registerReviewerSignature',
@@ -188,7 +192,7 @@ export async function firmarComoCustodio(
   const storagePath = `firmas/${revisionId}/custodio.png`;
   const storageRef = ref(storage, storagePath);
 
-  await uploadBytes(storageRef, blob, { contentType: 'image/png' });
+  await uploadBytes(storageRef, await toUploadBytes(blob), { contentType: 'image/png' });
 
   await callCallable<
     { revisionId: string; storagePath: string; nombre: string; cedula: string },

@@ -64,6 +64,11 @@ interface NormalizedEvidenceFile {
   contentType: SupportedImageType;
 }
 
+interface StorageUploadPayload {
+  bytes: Uint8Array;
+  size: number;
+}
+
 export interface UploadedEvidenceFile {
   id: string;
   storagePath: string;
@@ -300,6 +305,22 @@ async function compressEvidenceFile({
   }
 }
 
+async function buildStorageUploadPayload(file: Blob): Promise<StorageUploadPayload> {
+  try {
+    const buffer = await file.arrayBuffer();
+    return {
+      bytes: new Uint8Array(buffer),
+      size: buffer.byteLength,
+    };
+  } catch (error) {
+    throw new EvidenceUploadError(
+      'upload_failed',
+      'No fue posible preparar una de las evidencias para almacenarla.',
+      { cause: error }
+    );
+  }
+}
+
 async function uploadFilesToStorageOnce({
   documentId,
   storagePrefix,
@@ -314,6 +335,7 @@ async function uploadFilesToStorageOnce({
     for (let index = 0; index < files.length; index += 1) {
       const normalizedFile = await normalizeImageFile(files[index]);
       const compressedFile = await compressEvidenceFile(normalizedFile);
+      const uploadPayload = await buildStorageUploadPayload(compressedFile);
       const fileName = `${Date.now()}-${index + 1}-${sanitizeFileName(
         normalizedFile.file.name,
         normalizedFile.contentType
@@ -322,10 +344,20 @@ async function uploadFilesToStorageOnce({
       const storageRef = ref(storage, storagePath);
 
       try {
-        await uploadBytes(storageRef, compressedFile, {
+        await uploadBytes(storageRef, uploadPayload.bytes, {
           contentType: normalizedFile.contentType,
         });
       } catch (error) {
+        console.error('No fue posible cargar una evidencia a Firebase Storage.', {
+          storagePath,
+          fileName: normalizedFile.file.name,
+          contentType: normalizedFile.contentType,
+          originalSize: normalizedFile.file.size,
+          compressedSize: compressedFile.size,
+          uploadSize: uploadPayload.size,
+          code: getErrorCode(error),
+          error,
+        });
         throw classifyStorageError(
           error,
           'No fue posible cargar una de las evidencias al almacenamiento.'

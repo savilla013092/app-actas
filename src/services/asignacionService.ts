@@ -19,6 +19,10 @@ import { AsignacionInicial, Evidencia } from '@/types/asignacion';
 
 const COLLECTION = 'asignaciones';
 
+async function toUploadBytes(blob: Blob): Promise<Uint8Array> {
+  return new Uint8Array(await blob.arrayBuffer());
+}
+
 const mapAsignacion = (docId: string, data: Record<string, unknown>) => ({
   id: docId,
   ...data,
@@ -92,7 +96,7 @@ export async function firmarAsignacionComoRevisor(
   const storagePath = `asignaciones-firmas/${assignmentId}/revisor.png`;
   const storageRef = ref(storage, storagePath);
 
-  await uploadBytes(storageRef, blob, { contentType: 'image/png' });
+  await uploadBytes(storageRef, await toUploadBytes(blob), { contentType: 'image/png' });
   await callCallable<{ assignmentId: string; storagePath: string }, { ok: boolean }>(
     'registerInitialAssignmentReviewerSignature',
     {
@@ -116,7 +120,7 @@ export async function firmarAsignacionComoCustodio(
   const storagePath = `asignaciones-firmas/${assignmentId}/custodio.png`;
   const storageRef = ref(storage, storagePath);
 
-  await uploadBytes(storageRef, blob, { contentType: 'image/png' });
+  await uploadBytes(storageRef, await toUploadBytes(blob), { contentType: 'image/png' });
   await callCallable<
     { assignmentId: string; storagePath: string; nombre: string; cedula: string },
     { ok: boolean }
