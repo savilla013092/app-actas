@@ -2,6 +2,8 @@ export type EstadoActaFormal = 'borrador' | 'pendiente_firmas' | 'cerrada' | 'an
 
 export type MetodoFirmaActaFormal = 'firma_touch' | 'imagen' | 'clave';
 
+export type TipoActaFormal = 'general' | 'entrega_dotacion';
+
 export interface AsistenteActaFormal {
   id: string;
   nombre: string;
@@ -17,6 +19,7 @@ export interface CompromisoActaFormal {
 }
 
 export interface ActaFormalDraft {
+  tipoFormato?: TipoActaFormal;
   fecha: string;
   hora: string;
   lugar: string;
@@ -27,6 +30,7 @@ export interface ActaFormalDraft {
   desarrollo: string[];
   conclusiones: string[];
   compromisos: CompromisoActaFormal[];
+  entregaDotacion?: ActaEntregaDotacionData;
 }
 
 export interface ActaFormal extends ActaFormalDraft {
@@ -40,6 +44,15 @@ export interface ActaFormal extends ActaFormalDraft {
   actualizadoEn: Date;
   publicadoEn?: Date;
   cerradoEn?: Date;
+}
+
+export interface ActaEntregaDotacionData {
+  fecha: string;
+  receptorNombre: string;
+  receptorDocumento: string;
+  tallaPantalon: string;
+  tallaCamisa: string;
+  tallaBota: string;
 }
 
 export interface FirmanteActaFormal {

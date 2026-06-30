@@ -1,7 +1,10 @@
-import { ActaFormal, ActaFormalDraft, FirmanteActaFormal } from '@/types/actaFormal';
+import { ActaEntregaDotacionData, ActaFormal, ActaFormalDraft, FirmanteActaFormal } from '@/types/actaFormal';
 
 const HEADER_PATH = '/actas-formales/header-serviciudad.png';
 const FOOTER_PATH = '/actas-formales/footer-serviciudad.png';
+const ENTREGA_TEMPLATE_PATH = '/actas-formales/formato-acta-entrega.docx';
+const ENTREGA_DOTACION_IMAGE_PATH = '/actas-formales/entrega-dotacion.jpg';
+const ENTREGA_FIXED_SIGNATURE_PATH = '/actas-formales/firma-santiago-villa.png';
 
 const CONTENT_WIDTH = 8838;
 const THIN_BORDER = { style: 'single', size: 1, color: 'B7C4D4' };
@@ -14,6 +17,54 @@ const safeFileName = (value: string) =>
     .replace(/-+/g, '-')
     .replace(/^-|-$/g, '')
     .toLowerCase();
+
+const xmlEscape = (value: string) =>
+  value
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&apos;');
+
+const monthNames = [
+  'enero',
+  'febrero',
+  'marzo',
+  'abril',
+  'mayo',
+  'junio',
+  'julio',
+  'agosto',
+  'septiembre',
+  'octubre',
+  'noviembre',
+  'diciembre',
+];
+
+const parseLocalDate = (value: string) => {
+  const [year, month, day] = value.split('-').map((item) => Number(item));
+  if (year && month && day) {
+    return new Date(year, month - 1, day);
+  }
+
+  const parsed = new Date(value);
+  return Number.isNaN(parsed.getTime()) ? new Date() : parsed;
+};
+
+const formatEntregaDate = (value: string) => {
+  const date = parseLocalDate(value);
+  return `${date.getDate()} de ${monthNames[date.getMonth()]} de ${date.getFullYear()}`;
+};
+
+const formatEntregaMonthYear = (value: string) => {
+  const date = parseLocalDate(value);
+  return `${monthNames[date.getMonth()]} de ${date.getFullYear()}`;
+};
+
+const formatEntregaSemester = (value: string) => {
+  const date = parseLocalDate(value);
+  return `${date.getFullYear()}-${date.getMonth() < 6 ? '1' : '2'}`;
+};
 
 const readBlobAsDataUrl = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -537,4 +588,248 @@ export async function generarActaFormalPdf({
 
   const fileName = `${safeFileName('acta-formal-' + (acta.tipoReunion || 'reunion') + '-' + (acta.fecha || 'borrador'))}.pdf`;
   doc.save(fileName);
+}
+
+function buildEntregaReceiverSignatureRun(firmante?: FirmanteActaFormal) {
+  if (!firmante || firmante.estado !== 'firmada') {
+    return '';
+  }
+
+  if (firmante.firmaDataUrl) {
+    return `
+      <w:r><w:tab/></w:r>
+      <w:r>
+        <w:rPr><w:noProof/></w:rPr>
+        <w:drawing>
+          <wp:inline distT="0" distB="0" distL="0" distR="0">
+            <wp:extent cx="1184522" cy="511175"/>
+            <wp:effectExtent l="0" t="0" r="0" b="0"/>
+            <wp:docPr id="9131001" name="Firma recibe"/>
+            <wp:cNvGraphicFramePr>
+              <a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/>
+            </wp:cNvGraphicFramePr>
+            <a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main">
+              <a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                <pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture">
+                  <pic:nvPicPr>
+                    <pic:cNvPr id="9131001" name="Firma recibe"/>
+                    <pic:cNvPicPr/>
+                  </pic:nvPicPr>
+                  <pic:blipFill>
+                    <a:blip r:embed="rIdFirmaRecibe"/>
+                    <a:stretch><a:fillRect/></a:stretch>
+                  </pic:blipFill>
+                  <pic:spPr>
+                    <a:xfrm><a:off x="0" y="0"/><a:ext cx="1184522" cy="511175"/></a:xfrm>
+                    <a:prstGeom prst="rect"><a:avLst/></a:prstGeom>
+                  </pic:spPr>
+                </pic:pic>
+              </a:graphicData>
+            </a:graphic>
+          </wp:inline>
+        </w:drawing>
+      </w:r>`;
+  }
+
+  if (firmante.metodoFirma === 'clave') {
+    return `<w:r><w:tab/></w:r><w:r><w:rPr><w:i/><w:sz w:val="20"/></w:rPr><w:t>${xmlEscape(
+      firmante.claveFirma || 'Firma con clave'
+    )}</w:t></w:r>`;
+  }
+
+  return '';
+}
+
+export async function generarActaEntregaDotacionDocx({
+  data,
+  firmantes,
+}: {
+  data: ActaEntregaDotacionData;
+  firmantes: FirmanteActaFormal[];
+}) {
+  const { default: JSZip } = await import('jszip');
+  const response = await fetch(ENTREGA_TEMPLATE_PATH);
+  const templateBuffer = await response.arrayBuffer();
+  const zip = await JSZip.loadAsync(templateBuffer);
+  const documentFile = zip.file('word/document.xml');
+  const relsFile = zip.file('word/_rels/document.xml.rels');
+  const contentTypesFile = zip.file('[Content_Types].xml');
+
+  if (!documentFile || !relsFile || !contentTypesFile) {
+    throw new Error('La plantilla de acta de entrega no tiene la estructura esperada.');
+  }
+
+  const receptorNombre = data.receptorNombre.toUpperCase();
+  const receptorDocumento = data.receptorDocumento.trim();
+  const fechaCompleta = formatEntregaDate(data.fecha);
+  const mesAnio = formatEntregaMonthYear(data.fecha);
+  const semestre = formatEntregaSemester(data.fecha);
+
+  let documentXml = await documentFile.async('string');
+  documentXml = documentXml
+    .replace(/Dosquebradas, mayo de 2026/g, `Dosquebradas, ${xmlEscape(fechaCompleta)}`)
+    .replace(/PANTALON TALLA 36/g, `PANTALON TALLA ${xmlEscape(data.tallaPantalon.toUpperCase())}`)
+    .replace(/CAMISA TALLA L/g, `CAMISA TALLA ${xmlEscape(data.tallaCamisa.toUpperCase())}`)
+    .replace(/CALZADO TALLA 40 2026-1/g, `CALZADO TALLA ${xmlEscape(data.tallaBota.toUpperCase())} ${semestre}`)
+    .replace(/LUIS MIGUEL ACEVEDO GALLO/g, xmlEscape(receptorNombre))
+    .replace(/1088022678/g, xmlEscape(receptorDocumento))
+    .replace(/a partir de mayo de 2026/g, `a partir de ${xmlEscape(mesAnio)}`);
+
+  const firmante = firmantes.find((item) => item.estado === 'firmada');
+  const receiverSignatureRun = buildEntregaReceiverSignatureRun(firmante);
+  if (receiverSignatureRun) {
+    documentXml = documentXml.replace(
+      /<w:pPr><w:spacing w:before="250" w:after="250"\/><\/w:pPr>/,
+      '<w:pPr><w:tabs><w:tab w:val="left" w:pos="5500"/></w:tabs><w:spacing w:before="250" w:after="250"/></w:pPr>'
+    );
+    documentXml = documentXml.replace(
+      /(<w:p w14:paraId="592E4073"[\s\S]*?<\/w:drawing><\/w:r>)(<\/w:p>)/,
+      `$1${receiverSignatureRun}$2`
+    );
+
+    if (firmante?.firmaDataUrl) {
+      const signature = dataUrlToBytes(firmante.firmaDataUrl);
+      zip.file(`word/media/firma-recibe.${signature.type}`, signature.bytes);
+
+      let relsXml = await relsFile.async('string');
+      if (!relsXml.includes('rIdFirmaRecibe')) {
+        relsXml = relsXml.replace(
+          '</Relationships>',
+          `<Relationship Id="rIdFirmaRecibe" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/firma-recibe.${signature.type}"/></Relationships>`
+        );
+        zip.file('word/_rels/document.xml.rels', relsXml);
+      }
+
+      let contentTypesXml = await contentTypesFile.async('string');
+      if (signature.type === 'jpg' && !contentTypesXml.includes('Extension="jpg"')) {
+        contentTypesXml = contentTypesXml.replace(
+          '</Types>',
+          '<Default Extension="jpg" ContentType="image/jpeg"/></Types>'
+        );
+      }
+      if (signature.type === 'png' && !contentTypesXml.includes('Extension="png"')) {
+        contentTypesXml = contentTypesXml.replace(
+          '</Types>',
+          '<Default Extension="png" ContentType="image/png"/></Types>'
+        );
+      }
+      zip.file('[Content_Types].xml', contentTypesXml);
+    }
+  }
+
+  zip.file('word/document.xml', documentXml);
+  const blob = await zip.generateAsync({
+    type: 'blob',
+    mimeType: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+  });
+  downloadBlob(blob, `${safeFileName(`acta-entrega-${receptorNombre}-${data.fecha}`)}.docx`);
+  return blob;
+}
+
+export async function generarActaEntregaDotacionPdf({
+  data,
+  firmantes,
+}: {
+  data: ActaEntregaDotacionData;
+  firmantes: FirmanteActaFormal[];
+}) {
+  const [{ default: jsPDF }, { default: autoTable }] = await Promise.all([
+    import('jspdf'),
+    import('jspdf-autotable'),
+  ]);
+  const [headerDataUrl, footerDataUrl, dotacionDataUrl, fixedSignatureDataUrl] = await Promise.all([
+    fetchDataUrl(HEADER_PATH),
+    fetchDataUrl(FOOTER_PATH),
+    fetchDataUrl(ENTREGA_DOTACION_IMAGE_PATH),
+    fetchDataUrl(ENTREGA_FIXED_SIGNATURE_PATH),
+  ]);
+  const doc = new jsPDF('p', 'pt', 'letter');
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const pageHeight = doc.internal.pageSize.getHeight();
+  const receptorNombre = data.receptorNombre.toUpperCase();
+  const receptorDocumento = data.receptorDocumento.trim();
+  const firmante = firmantes.find((item) => item.estado === 'firmada');
+  let y = 130;
+
+  doc.addImage(headerDataUrl, 'PNG', 38, 22, 536, 94, undefined, 'FAST');
+  doc.addImage(footerDataUrl, 'PNG', 52, pageHeight - 58, 508, 62, undefined, 'FAST');
+
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(14);
+  doc.text('ACTA DE ENTREGA', pageWidth / 2, y, { align: 'center' });
+  y += 28;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(12);
+  doc.text(`Dosquebradas, ${formatEntregaDate(data.fecha)}`, 58, y);
+  y += 22;
+
+  autoTable(doc, {
+    startY: y,
+    margin: { left: 58, right: 58 },
+    theme: 'grid',
+    styles: { font: 'helvetica', fontSize: 9, lineColor: [0, 0, 0], lineWidth: 0.4, cellPadding: 4 },
+    head: [['No', 'IMAGEN', 'CANTIDADES', 'DESCRIPCION']],
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold' },
+    body: [
+      ['1', '', '1', `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`],
+      ['2', '', '1', `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`],
+      ['3', '', '1', `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`],
+    ],
+    didDrawCell: (cellData) => {
+      if (cellData.section === 'body' && cellData.column.index === 1 && cellData.row.index === 0) {
+        doc.addImage(dotacionDataUrl, 'JPEG', cellData.cell.x + 12, cellData.cell.y + 8, 88, 76, undefined, 'FAST');
+      }
+    },
+    columnStyles: {
+      0: { halign: 'center', cellWidth: 36 },
+      1: { halign: 'center', cellWidth: 120 },
+      2: { halign: 'center', cellWidth: 78 },
+      3: { cellWidth: 262 },
+    },
+  });
+  y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || y) + 22;
+
+  doc.setFont('helvetica', 'bold');
+  doc.text('DESTINO:', 58, y);
+  y += 20;
+  doc.setFont('helvetica', 'normal');
+  doc.setFontSize(11);
+  const body = [
+    `Se hace entrega Al funcionario ${receptorNombre} identificado con C.C ${receptorDocumento} del elemento que se relaciona en el cuadro anterior y en las mismas condiciones debera ser devuelto al Almacen de SERVICIUDAD, salvo el deterioro normal por su uso.`,
+    'Si se presenta desperfecto por manejo inapropiado dentro del uso normal, perdida, hurto o dano sera responsabilidad de quien lo recibe.',
+    `Nota: La bota tiene una garantia de cuatro (3) meses a partir de ${formatEntregaMonthYear(data.fecha)}; despues de este periodo no se aceptan reclamos ni devoluciones`,
+    'Recibida la dotacion se tiene 15 dias calendario para realizar cualquier reclamo',
+    'En caso de cambio de destino o funcionario de estos elementos, debera ser notificado por escrito al area de talento humano por la persona a cargo del mismo.',
+  ];
+  body.forEach((paragraphText) => {
+    const lines = doc.splitTextToSize(paragraphText, pageWidth - 116);
+    doc.text(lines, 58, y);
+    y += lines.length * 13 + 8;
+  });
+
+  y += 18;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(12);
+  doc.text('Entrega', 96, y);
+  doc.text('Recibe', 360, y);
+  y += 16;
+  doc.addImage(fixedSignatureDataUrl, 'PNG', 82, y, 118, 52, undefined, 'FAST');
+  if (firmante?.firmaDataUrl) {
+    doc.addImage(firmante.firmaDataUrl, 'PNG', 346, y, 118, 52, undefined, 'FAST');
+  } else if (firmante?.metodoFirma === 'clave') {
+    doc.setFont('times', 'italic');
+    doc.setFontSize(10);
+    doc.text(firmante.claveFirma || receptorNombre, 346, y + 28);
+  }
+  y += 62;
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(10);
+  doc.text('SANTIAGO VILLA ROMERO', 58, y);
+  doc.text(receptorNombre, 322, y);
+  y += 14;
+  doc.setFont('helvetica', 'normal');
+  doc.text('Profesional Especializado Logistica', 58, y);
+  doc.text(`C.C ${receptorDocumento}`, 322, y);
+
+  doc.save(`${safeFileName(`acta-entrega-${receptorNombre}-${data.fecha}`)}.pdf`);
 }

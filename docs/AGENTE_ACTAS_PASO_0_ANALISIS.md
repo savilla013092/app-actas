@@ -3,6 +3,7 @@
 ## Formatos y estructura existentes
 
 - `formato documento.docx`: existe en la raiz del repositorio. Al inspeccionarlo, el cuerpo del Word esta vacio y no contiene campos editables de acta; el formato real esta en el encabezado y pie como imagenes institucionales.
+- `FORMATO ACTA DE ENTREGA.docx`: formato especial oficial para entrega de dotacion. A diferencia del formato base, si contiene cuerpo editable, tabla fija de prendas, foto, texto legal fijo, firma fija de quien entrega y espacio de quien recibe.
 - Recursos extraidos del formato:
   - `public/actas-formales/header-serviciudad.png`
   - `public/actas-formales/footer-serviciudad.png`
@@ -18,6 +19,7 @@
 - El patron de estados de firma: borrador, pendiente de firma, firmado/cerrado.
 - El enfoque de trazabilidad con fecha, autor, estado y auditoria de documentos.
 - El membrete oficial del Word existente, usado como base visual para Word/PDF del nuevo modulo.
+- La plantilla `FORMATO ACTA DE ENTREGA.docx`, usada como plantilla binaria para conservar siempre igual la estructura del acta de entrega.
 
 ## Que faltaba construir
 
@@ -27,6 +29,7 @@
 - Enlaces publicos individuales para que cada asistente firme desde su celular sin instalar nada.
 - Estado de firmas en tiempo real y cierre automatico del acta cuando todos firman.
 - Historico de actas formales por autor y estado.
+- Flujo especial para acta de entrega que solo pide fecha, receptor/documento y tallas de pantalon, camisa y bota.
 
 ## Decision de implementacion
 
@@ -37,5 +40,6 @@ Se construyo todo de forma aditiva:
 - Nueva coleccion Firestore: `actas_formales`.
 - Nueva subcoleccion por acta: `firmantes`.
 - Nuevos generadores de documento en `src/lib/actas-formales/documentGenerator.ts`.
+- Nueva plantilla publica: `public/actas-formales/formato-acta-entrega.docx`.
 
 Los flujos existentes de activos, revisiones, asignaciones y prestamos express no se eliminaron ni se reemplazaron.

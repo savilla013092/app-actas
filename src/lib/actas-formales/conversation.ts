@@ -1,4 +1,5 @@
 import {
+  ActaEntregaDotacionData,
   ActaFormalDraft,
   AsistenteActaFormal,
   CompromisoActaFormal,
@@ -30,6 +31,7 @@ const FIELD_ORDER: CampoActaFormal[] = [
 ];
 
 export const emptyActaFormalDraft: ActaFormalDraft = {
+  tipoFormato: 'general',
   fecha: '',
   hora: '',
   lugar: '',
@@ -40,6 +42,50 @@ export const emptyActaFormalDraft: ActaFormalDraft = {
   desarrollo: [],
   conclusiones: [],
   compromisos: [],
+};
+
+export type CampoActaEntregaDotacion =
+  | 'fecha'
+  | 'receptorNombre'
+  | 'receptorDocumento'
+  | 'tallaPantalon'
+  | 'tallaCamisa'
+  | 'tallaBota';
+
+export const emptyActaEntregaDotacionData: ActaEntregaDotacionData = {
+  fecha: '',
+  receptorNombre: '',
+  receptorDocumento: '',
+  tallaPantalon: '',
+  tallaCamisa: '',
+  tallaBota: '',
+};
+
+const ENTREGA_FIELD_ORDER: CampoActaEntregaDotacion[] = [
+  'fecha',
+  'receptorNombre',
+  'receptorDocumento',
+  'tallaPantalon',
+  'tallaCamisa',
+  'tallaBota',
+];
+
+export const entregaCampoLabels: Record<CampoActaEntregaDotacion, string> = {
+  fecha: 'fecha',
+  receptorNombre: 'persona que recibe y firma',
+  receptorDocumento: 'cedula o documento',
+  tallaPantalon: 'talla de pantalon',
+  tallaCamisa: 'talla de camisa',
+  tallaBota: 'talla de bota',
+};
+
+export const entregaCampoPrompts: Record<CampoActaEntregaDotacion, string> = {
+  fecha: 'Indique la fecha del acta de entrega.',
+  receptorNombre: 'Indique el nombre completo de la persona que recibe y firma.',
+  receptorDocumento: 'Indique la cedula o documento de la persona que recibe.',
+  tallaPantalon: 'Indique la talla del pantalon.',
+  tallaCamisa: 'Indique la talla de la camisa.',
+  tallaBota: 'Indique la talla de la bota o calzado.',
 };
 
 export const campoLabels: Record<CampoActaFormal, string> = {
@@ -242,6 +288,12 @@ export function applyBulkAnswer(draft: ActaFormalDraft, answer: string): ActaFor
 }
 
 export function buildActaTitle(draft: ActaFormalDraft) {
+  if (draft.tipoFormato === 'entrega_dotacion') {
+    const name = draft.entregaDotacion?.receptorNombre || 'receptor';
+    const date = draft.entregaDotacion?.fecha || draft.fecha || new Date().toISOString().slice(0, 10);
+    return `Acta de entrega - ${name} - ${date}`;
+  }
+
   const type = draft.tipoReunion?.trim() || 'reunion';
   const date = draft.fecha?.trim() || new Date().toISOString().slice(0, 10);
   return `Acta de ${type} - ${date}`;
@@ -256,5 +308,68 @@ export function buildDraftSummary(draft: ActaFormalDraft) {
     `Asistentes: ${draft.asistentes.length}`,
     `Orden del dia: ${draft.ordenDia.length} punto(s)`,
     `Compromisos: ${draft.compromisos.length}`,
+  ].join('\n');
+}
+
+export function getMissingEntregaFields(data: ActaEntregaDotacionData): CampoActaEntregaDotacion[] {
+  return ENTREGA_FIELD_ORDER.filter((field) => !String(data[field] || '').trim());
+}
+
+export function getNextEntregaPrompt(data: ActaEntregaDotacionData) {
+  const [nextField] = getMissingEntregaFields(data);
+  if (!nextField) {
+    return 'Ya tengo los datos del acta de entrega. Puede generar el borrador y enviarlo a firma.';
+  }
+
+  return entregaCampoPrompts[nextField];
+}
+
+export function applyEntregaFieldAnswer(
+  data: ActaEntregaDotacionData,
+  field: CampoActaEntregaDotacion,
+  answer: string
+): ActaEntregaDotacionData {
+  const value = answer.trim();
+  if (!value) return data;
+
+  return {
+    ...data,
+    [field]: field === 'receptorNombre' ? value.toUpperCase() : value,
+  };
+}
+
+export function buildEntregaDraft(data: ActaEntregaDotacionData): ActaFormalDraft {
+  return {
+    tipoFormato: 'entrega_dotacion',
+    fecha: data.fecha,
+    hora: 'No aplica',
+    lugar: 'Dosquebradas',
+    tipoReunion: 'Acta de entrega de dotacion',
+    asistentes: [
+      {
+        id: 'receptor-dotacion',
+        nombre: data.receptorNombre.toUpperCase(),
+        cargo: 'Recibe dotacion',
+      },
+    ],
+    objetivo: 'Formalizar la entrega de dotacion institucional.',
+    ordenDia: ['Entrega de dotacion institucional.'],
+    desarrollo: [
+      `Se hace entrega de la dotacion al funcionario ${data.receptorNombre.toUpperCase()} identificado con C.C ${data.receptorDocumento}.`,
+    ],
+    conclusiones: ['La dotacion queda recibida por el funcionario y sujeta a las condiciones del formato oficial.'],
+    compromisos: [],
+    entregaDotacion: data,
+  };
+}
+
+export function buildEntregaSummary(data: ActaEntregaDotacionData) {
+  return [
+    `Fecha: ${data.fecha || 'pendiente'}`,
+    `Recibe/Firma: ${data.receptorNombre || 'pendiente'}`,
+    `Documento: ${data.receptorDocumento || 'pendiente'}`,
+    `Pantalon: ${data.tallaPantalon || 'pendiente'}`,
+    `Camisa: ${data.tallaCamisa || 'pendiente'}`,
+    `Bota: ${data.tallaBota || 'pendiente'}`,
   ].join('\n');
 }

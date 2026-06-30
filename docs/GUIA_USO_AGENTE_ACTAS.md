@@ -8,8 +8,11 @@
 
 ## Crear un acta
 
-1. Seleccione si desea responder **Paso a paso** o pegar la informacion **En bloque**.
-2. Entregue los datos que el agente solicita:
+1. Seleccione el tipo de documento:
+   - **Acta formal** para reuniones o comites.
+   - **Acta de entrega** para el formato fijo de dotacion.
+2. En actas formales, seleccione si desea responder **Paso a paso** o pegar la informacion **En bloque**.
+3. Entregue los datos que el agente solicita:
    - fecha
    - hora
    - lugar
@@ -20,7 +23,22 @@
    - desarrollo
    - conclusiones
    - compromisos con responsable y fecha limite
-3. Cuando todos los campos aparezcan como listos, pulse **Generar borrador**.
+4. Cuando todos los campos aparezcan como listos, pulse **Generar borrador**.
+
+## Acta de entrega
+
+Este formato es especial y siempre conserva la misma estructura del archivo oficial `FORMATO ACTA DE ENTREGA.docx`.
+
+El agente solo solicita:
+
+- fecha
+- nombre de la persona que recibe y firma
+- cedula o documento
+- talla de pantalon
+- talla de camisa
+- talla de bota o calzado
+
+La persona que entrega queda fija como **SANTIAGO VILLA ROMERO**, con su firma ya incluida en el formato. La persona que recibe firma desde su celular con el enlace individual.
 
 ## Enviar a firmas
 
