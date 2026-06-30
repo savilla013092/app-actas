@@ -2,7 +2,7 @@ import test, { after, before, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { assertFails, assertSucceeds } from '@firebase/rules-unit-testing';
-import { doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
+import { Timestamp, collection, doc, getDoc, setDoc, updateDoc } from 'firebase/firestore';
 
 import {
   authClaims,
@@ -136,6 +136,63 @@ test('express loans, auditoria y consecutivos quedan fuera de escritura cliente'
   );
   await assertFails(getDoc(doc(adminDb, 'consecutivos', 'revisiones')));
   await assertFails(getDoc(doc(logisticaDb, 'auditoria', 'audit-1')));
+});
+
+test('actas formales: logistica administra sus actas y firmante publico solo firma su token', async () => {
+  const logisticaDb = firestoreContext(testEnv, ids.logistica, authClaims.logistica);
+  const custodioDb = firestoreContext(testEnv, ids.custodio, authClaims.custodio);
+  const publicDb = testEnv.unauthenticatedContext().firestore();
+
+  await assertSucceeds(getDoc(doc(logisticaDb, 'actas_formales', ids.formalActa)));
+  await assertSucceeds(
+    setDoc(doc(collection(logisticaDb, 'actas_formales')), {
+      titulo: 'Acta creada desde cliente',
+      fecha: '2026-03-13',
+      hora: '10:00',
+      lugar: 'Sala',
+      tipoReunion: 'Comite',
+      asistentes: [],
+      objetivo: 'Prueba',
+      ordenDia: ['Uno'],
+      desarrollo: ['Dos'],
+      conclusiones: ['Tres'],
+      compromisos: [],
+      estado: 'borrador',
+      creadoPor: ids.logistica,
+      creadoPorNombre: 'Logistica Principal',
+      creadoEn: Timestamp.now(),
+      actualizadoEn: Timestamp.now(),
+    })
+  );
+  await assertFails(
+    setDoc(doc(collection(custodioDb, 'actas_formales')), {
+      titulo: 'Acta no permitida',
+      creadoPor: ids.custodio,
+      estado: 'borrador',
+    })
+  );
+
+  const signerRef = doc(publicDb, 'actas_formales', ids.formalActa, 'firmantes', ids.formalToken);
+  const signer = await assertSucceeds(getDoc(signerRef));
+  assert.equal(signer.data()?.estado, 'pendiente');
+
+  await assertSucceeds(
+    updateDoc(signerRef, {
+      estado: 'firmada',
+      metodoFirma: 'clave',
+      claveFirma: 'Firmante Uno',
+      declaracionAceptada: true,
+      fechaFirma: Timestamp.now(),
+      userAgent: 'rules-test',
+      actualizadoEn: Timestamp.now(),
+    })
+  );
+
+  await assertFails(
+    updateDoc(signerRef, {
+      nombre: 'Cambio indebido',
+    })
+  );
 });
 
 test('sin perfil o con claims inactivos no hay acceso operativo', async () => {

@@ -42,6 +42,49 @@ service cloud.firestore {
       return isSignedIn() && request.auth.uid == userId;
     }
 
+    function formalActaData(actaId) {
+      return get(/databases/$(database)/documents/actas_formales/$(actaId)).data;
+    }
+
+    function canManageFormalActa(actaId) {
+      return isAdmin() ||
+        (isLogistica() && formalActaData(actaId).creadoPor == request.auth.uid);
+    }
+
+    function isValidPublicSignatureUpdate() {
+      return request.auth == null &&
+        resource.data.estado == 'pendiente' &&
+        request.resource.data.estado == 'firmada' &&
+        request.resource.data.actaId == resource.data.actaId &&
+        request.resource.data.asistenteId == resource.data.asistenteId &&
+        request.resource.data.nombre == resource.data.nombre &&
+        request.resource.data.cargo == resource.data.cargo &&
+        request.resource.data.declaracionAceptada == true &&
+        request.resource.data.metodoFirma in ['firma_touch', 'imagen', 'clave'] &&
+        request.resource.data.diff(resource.data).changedKeys().hasOnly([
+          'estado',
+          'metodoFirma',
+          'firmaDataUrl',
+          'claveFirma',
+          'declaracionAceptada',
+          'fechaFirma',
+          'userAgent',
+          'actualizadoEn'
+        ]) &&
+        (
+          (
+            request.resource.data.metodoFirma in ['firma_touch', 'imagen'] &&
+            request.resource.data.firmaDataUrl is string &&
+            request.resource.data.firmaDataUrl.matches('^data:image/')
+          ) ||
+          (
+            request.resource.data.metodoFirma == 'clave' &&
+            request.resource.data.claveFirma is string &&
+            request.resource.data.claveFirma.size() >= 3
+          )
+        );
+    }
+
     match /usuarios/{userId} {
       allow read: if isOwner(userId) || isAdminOrLogistica();
       allow create, update, delete: if false;
@@ -69,6 +112,23 @@ service cloud.firestore {
     match /express_loans/{loanId} {
       allow read: if isAdminOrLogistica();
       allow create, update, delete: if false;
+    }
+
+    match /actas_formales/{actaId} {
+      allow read: if isAdmin() ||
+        (hasManagedAccess() && resource.data.creadoPor == request.auth.uid);
+      allow create: if isAdminOrLogistica() &&
+        request.resource.data.creadoPor == request.auth.uid;
+      allow update: if canManageFormalActa(actaId);
+      allow delete: if false;
+
+      match /firmantes/{tokenId} {
+        allow get: if true;
+        allow list: if canManageFormalActa(actaId);
+        allow create: if canManageFormalActa(actaId);
+        allow update: if canManageFormalActa(actaId) || isValidPublicSignatureUpdate();
+        allow delete: if false;
+      }
     }
 
     match /consecutivos/{docId} {

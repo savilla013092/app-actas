@@ -9,6 +9,7 @@ import {
   LucideBox,
   LucideChevronRight,
   LucideClipboardList,
+  LucideFileSignature,
   LucideLayoutDashboard,
   LucideLogOut,
   LucideMenu,
@@ -33,6 +34,12 @@ const navItems = [
     label: 'Préstamo Express',
     href: '/express-loans',
     icon: LucideBox,
+    roles: ['admin', 'logistica'],
+  },
+  {
+    label: 'Agente de actas',
+    href: '/agente-actas',
+    icon: LucideFileSignature,
     roles: ['admin', 'logistica'],
   },
   {
@@ -64,6 +71,7 @@ const pageTitles: Record<string, string> = {
   '/express-loans': 'Préstamo express',
   '/express-loans/new': 'Nuevo préstamo express',
   '/asignaciones': 'Asignaciones iniciales',
+  '/agente-actas': 'Agente de actas',
 };
 
 export default function DashboardLayout({ children }: { children: React.ReactNode }) {
