@@ -15,6 +15,7 @@
         "test": "npm run test:smoke",
         "test:rules": "node scripts/run-emulator-tests.cjs rules",
         "test:smoke": "node tests/smoke/repository-guards.run.mjs",
+        "terceros:catalogo": "node scripts/generar-terceros-catalogo.mjs",
         "test:smoke:roles": "node scripts/run-emulator-tests.cjs smoke"
     },
     "dependencies": {

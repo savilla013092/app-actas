@@ -32,13 +32,15 @@ Este formato es especial y siempre conserva la misma estructura del archivo ofic
 El agente solo solicita:
 
 - fecha
-- nombre de la persona que recibe y firma
-- cedula o documento
+- nombre de la persona que recibe y firma; al escribirlo o dictarlo, el agente consulta `TERCEROS.xlsx` y carga la identificacion si encuentra una coincidencia confiable
+- cedula o documento, solo si el tercero no se encuentra automaticamente
 - talla de pantalon
 - talla de camisa
 - talla de bota o calzado
 
 La persona que entrega queda fija como **SANTIAGO VILLA ROMERO**, con su firma ya incluida en el formato. La persona que recibe firma desde su celular con el enlace individual.
+
+Cuando se actualice el archivo `TERCEROS.xlsx`, ejecute `npm run terceros:catalogo` antes de desplegar para regenerar el catalogo interno de busqueda.
 
 ## Enviar a firmas
 

@@ -81,7 +81,8 @@ export const entregaCampoLabels: Record<CampoActaEntregaDotacion, string> = {
 
 export const entregaCampoPrompts: Record<CampoActaEntregaDotacion, string> = {
   fecha: 'Indique la fecha del acta de entrega.',
-  receptorNombre: 'Indique el nombre completo de la persona que recibe y firma.',
+  receptorNombre:
+    'Indique el nombre completo de la persona que recibe y firma. Buscare la identificacion en terceros automaticamente.',
   receptorDocumento: 'Indique la cedula o documento de la persona que recibe.',
   tallaPantalon: 'Indique la talla del pantalon.',
   tallaCamisa: 'Indique la talla de la camisa.',

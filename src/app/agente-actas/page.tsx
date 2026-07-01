@@ -62,6 +62,18 @@ import {
 
 type CaptureMode = 'paso' | 'bloque';
 
+type TerceroApiMatch = {
+  nombre: string;
+  documento: string;
+  dv?: string;
+  score: number;
+};
+
+type TercerosLookupResponse = {
+  matches: TerceroApiMatch[];
+  selected: TerceroApiMatch | null;
+};
+
 type SpeechRecognitionLike = {
   lang: string;
   continuous: boolean;
@@ -135,6 +147,7 @@ export default function AgenteActasPage() {
   const [publishing, setPublishing] = useState(false);
   const [downloading, setDownloading] = useState<'docx' | 'pdf' | null>(null);
   const [listening, setListening] = useState(false);
+  const [lookingTercero, setLookingTercero] = useState(false);
   const [closingActa, setClosingActa] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
@@ -225,24 +238,40 @@ export default function AgenteActasPage() {
     ]);
   };
 
-  const appendEntregaAgentPrompt = (nextData: ActaEntregaDotacionData) => {
+  const buildEntregaPromptMessages = (nextData: ActaEntregaDotacionData) => {
     const missing = getMissingEntregaFields(nextData);
     if (missing.length === 0) {
-      setMessages((current) => [
-        ...current,
+      return [
         createMessage('agente', `Datos completos para acta de entrega:\n${buildEntregaSummary(nextData)}`),
         createMessage('agente', 'Genere el borrador para dejar el documento listo y enviarlo a firma desde celular.'),
-      ]);
-      return;
+      ];
     }
 
-    setMessages((current) => [
-      ...current,
+    return [
       createMessage('agente', `Falta ${entregaCampoLabels[missing[0]]}. ${getNextEntregaPrompt(nextData)}`),
-    ]);
+    ];
   };
 
-  const handleSend = () => {
+  const appendEntregaAgentPrompt = (
+    nextData: ActaEntregaDotacionData,
+    previousMessages: MensajeAsistenteActaFormal[] = []
+  ) => {
+    setMessages((current) => [...current, ...previousMessages, ...buildEntregaPromptMessages(nextData)]);
+  };
+
+  const lookupTerceroByName = async (nombre: string): Promise<TercerosLookupResponse> => {
+    const response = await fetch(`/api/terceros?nombre=${encodeURIComponent(nombre)}`, {
+      headers: { Accept: 'application/json' },
+    });
+
+    if (!response.ok) {
+      throw new Error('No fue posible consultar terceros.');
+    }
+
+    return response.json();
+  };
+
+  const handleSend = async () => {
     const answer = input.trim();
     if (!answer) return;
 
@@ -250,14 +279,62 @@ export default function AgenteActasPage() {
     setInput('');
 
     if (isEntrega) {
-      const nextData = nextEntregaField
+      let nextData = nextEntregaField
         ? applyEntregaFieldAnswer(entregaData, nextEntregaField, answer)
         : entregaData;
+      const lookupMessages: MensajeAsistenteActaFormal[] = [];
+
+      if (nextEntregaField === 'receptorNombre') {
+        setLookingTercero(true);
+        try {
+          const result = await lookupTerceroByName(answer);
+
+          if (result.selected) {
+            nextData = {
+              ...nextData,
+              receptorNombre: result.selected.nombre.toUpperCase(),
+              receptorDocumento: result.selected.documento,
+            };
+            lookupMessages.push(
+              createMessage(
+                'agente',
+                `Identificacion encontrada en terceros: ${result.selected.documento} para ${result.selected.nombre}.`
+              )
+            );
+          } else if (result.matches.length > 0) {
+            const options = result.matches
+              .slice(0, 3)
+              .map((match) => `- ${match.nombre} (${match.documento})`)
+              .join('\n');
+            lookupMessages.push(
+              createMessage(
+                'agente',
+                `Encontre posibles terceros, pero no una coincidencia unica:\n${options}\nIndique la identificacion manualmente.`
+              )
+            );
+          } else {
+            lookupMessages.push(
+              createMessage('agente', 'No encontre ese nombre en terceros. Indique la identificacion manualmente.')
+            );
+          }
+        } catch (error) {
+          console.error('No fue posible consultar terceros.', error);
+          lookupMessages.push(
+            createMessage(
+              'agente',
+              'No pude consultar terceros en este momento. Indique la identificacion manualmente para continuar.'
+            )
+          );
+        } finally {
+          setLookingTercero(false);
+        }
+      }
+
       const nextDraft = buildEntregaDraft(nextData);
       setEntregaData(nextData);
       setDraft(nextDraft);
       setSelectedActa(null);
-      appendEntregaAgentPrompt(nextData);
+      appendEntregaAgentPrompt(nextData, lookupMessages);
       return;
     }
 
@@ -584,7 +661,7 @@ export default function AgenteActasPage() {
                 className='min-h-[92px] resize-none rounded-lg'
                 onKeyDown={(event) => {
                   if (event.key === 'Enter' && (event.ctrlKey || event.metaKey)) {
-                    handleSend();
+                    void handleSend();
                   }
                 }}
               />
@@ -598,7 +675,13 @@ export default function AgenteActasPage() {
                 >
                   {listening ? <LucideMicOff size={18} /> : <LucideMic size={18} />}
                 </Button>
-                <Button type='button' size='icon' onClick={handleSend} title='Enviar'>
+                <Button
+                  type='button'
+                  size='icon'
+                  onClick={() => void handleSend()}
+                  title={lookingTercero ? 'Consultando terceros' : 'Enviar'}
+                  disabled={lookingTercero}
+                >
                   <LucideSend size={18} />
                 </Button>
               </div>
