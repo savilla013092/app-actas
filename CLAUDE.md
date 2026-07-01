@@ -43,7 +43,7 @@ npm run terceros:catalogo    # Regenera src/lib/actas-formales/tercerosCatalog.j
 ### Tech Stack
 - **Frontend:** Next.js 14 (App Router) + TypeScript + TailwindCSS. PWA instalable vía `@ducanh2912/next-pwa`.
 - **Backend:** Firebase (Firestore, Auth, Storage, Cloud Functions). Verificación de ID token en el servidor con `firebase-admin`.
-- **IA:** `@anthropic-ai/sdk` (Claude) en rutas de servidor para extracción estructurada.
+- **IA:** `@google/genai` (Gemini, nivel gratuito) en rutas de servidor para extracción estructurada.
 - **Estado:** Zustand (`src/stores/authStore.ts`). **Formularios:** React Hook Form + Zod. **Firma:** react-signature-canvas.
 - **Documentos:** `docx` y `jspdf` (cliente); `pdfkit` en Cloud Functions.
 
@@ -99,16 +99,16 @@ Página cliente que arma dos tipos de acta:
 - **Entrega de dotación** (`tipoFormato: 'entrega_dotacion'`): formato **preconfigurado** (lugar, objetivo y textos fijos en `buildEntregaDraft`); solo pide fecha, receptor, documento y tallas.
 
 Tres modos de captura (`src/app/agente-actas/page.tsx`):
-- **Nota IA** (por defecto): se dicta/pega una sola nota; `POST /api/actas/extraer` la interpreta con Claude (`messages.create` + `output_config.format` JSON schema, validado con Zod) y rellena el borrador. Reusa `tercerosLookup` para resolver la cédula por nombre.
+- **Nota IA** (por defecto): se dicta/pega una sola nota; `POST /api/actas/extraer` la interpreta con Gemini (`generateContent` + `responseSchema` JSON, validado con Zod) y rellena el borrador. Reusa `tercerosLookup` para resolver la cédula por nombre.
 - **Paso a paso** y **En bloque**: parser determinista en `src/lib/actas-formales/conversation.ts` (regex).
 
-**Diseño híbrido:** si `ANTHROPIC_API_KEY` no está configurada o la IA falla, el modo Nota cae automáticamente al parser determinista. El dictado usa la Web Speech API del navegador (`es-CO`).
+**Diseño híbrido:** si `GEMINI_API_KEY` no está configurada o la IA falla, el modo Nota cae automáticamente al parser determinista. El dictado usa la Web Speech API del navegador (`es-CO`).
 
 **Firmas:** el acta se publica generando un enlace por asistente (`/firmar-acta/[actaId]/[token]`); al completarse todas las firmas se cierra (`marcarActaFormalCerrada`). Descarga en Word/PDF vía `documentGenerator.ts`.
 
 ### Variables de entorno de IA (solo servidor, sin `NEXT_PUBLIC_`)
-- `ANTHROPIC_API_KEY` — sin ella el modo Nota usa el respaldo determinista.
-- `ACTAS_AI_MODEL` — modelo de Claude (default `claude-haiku-4-5`; alternativa `claude-sonnet-4-6`).
+- `GEMINI_API_KEY` — clave de Google AI Studio (nivel gratuito). Sin ella el modo Nota usa el respaldo determinista.
+- `GEMINI_MODEL` — modelo de Gemini (default `gemini-2.5-flash-lite`, nivel gratuito).
 - `FIREBASE_ADMIN_CREDENTIALS` — opcional (JSON o base64). La verificación del ID token funciona solo con el `projectId`.
 
 ## Dual Signature Flow (revisiones)
@@ -135,3 +135,5 @@ Estados de acta formal: `borrador` → `pendiente_firmas` → `cerrada` (o `anul
 - Solo logística crea revisiones.
 - Consecutivos y auditoría son exclusivos de Cloud Functions.
 - El endpoint `/api/actas/extraer` exige ID token de Firebase válido antes de llamar a la IA.
+
+> **Privacidad:** el modo Nota IA envía el texto de la nota (nombres, cédulas) a Google (Gemini). En el nivel gratuito el contenido puede usarse para mejorar sus modelos; tenerlo en cuenta para datos institucionales sensibles.

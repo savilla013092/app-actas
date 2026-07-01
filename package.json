@@ -19,7 +19,7 @@
         "test:smoke:roles": "node scripts/run-emulator-tests.cjs smoke"
     },
     "dependencies": {
-        "@anthropic-ai/sdk": "^0.109.0",
+        "@google/genai": "^2.10.0",
         "@hookform/resolvers": "^3.3.2",
         "@radix-ui/react-dialog": "^1.0.5",
         "@radix-ui/react-label": "^2.0.2",

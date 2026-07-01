@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import Anthropic from '@anthropic-ai/sdk';
+import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
 
 import {
@@ -22,54 +22,50 @@ import {
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
 
-const DEFAULT_MODEL = 'claude-haiku-4-5';
+const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 
-// Esquema JSON unico: el modelo indica el tipo y llena solo el subconjunto de
-// campos que aplica (los demas van como cadena vacia). Estructura compatible con
-// structured outputs (additionalProperties: false + required en cada objeto).
-const outputSchema = {
-  type: 'object',
-  additionalProperties: false,
+// Esquema para la salida estructurada de Gemini (responseSchema). El modelo indica
+// el tipo y llena solo el subconjunto de campos que aplica (el resto queda vacio).
+const responseSchema = {
+  type: Type.OBJECT,
   properties: {
-    tipoDetectado: { type: 'string', enum: ['general', 'entrega_dotacion'] },
-    fecha: { type: 'string' },
-    hora: { type: 'string' },
-    lugar: { type: 'string' },
-    tipoReunion: { type: 'string' },
-    objetivo: { type: 'string' },
+    tipoDetectado: { type: Type.STRING, enum: ['general', 'entrega_dotacion'] },
+    fecha: { type: Type.STRING },
+    hora: { type: Type.STRING },
+    lugar: { type: Type.STRING },
+    tipoReunion: { type: Type.STRING },
+    objetivo: { type: Type.STRING },
     asistentes: {
-      type: 'array',
+      type: Type.ARRAY,
       items: {
-        type: 'object',
-        additionalProperties: false,
+        type: Type.OBJECT,
         properties: {
-          nombre: { type: 'string' },
-          cargo: { type: 'string' },
+          nombre: { type: Type.STRING },
+          cargo: { type: Type.STRING },
         },
         required: ['nombre', 'cargo'],
       },
     },
-    ordenDia: { type: 'array', items: { type: 'string' } },
-    desarrollo: { type: 'array', items: { type: 'string' } },
-    conclusiones: { type: 'array', items: { type: 'string' } },
+    ordenDia: { type: Type.ARRAY, items: { type: Type.STRING } },
+    desarrollo: { type: Type.ARRAY, items: { type: Type.STRING } },
+    conclusiones: { type: Type.ARRAY, items: { type: Type.STRING } },
     compromisos: {
-      type: 'array',
+      type: Type.ARRAY,
       items: {
-        type: 'object',
-        additionalProperties: false,
+        type: Type.OBJECT,
         properties: {
-          descripcion: { type: 'string' },
-          responsable: { type: 'string' },
-          fechaLimite: { type: 'string' },
+          descripcion: { type: Type.STRING },
+          responsable: { type: Type.STRING },
+          fechaLimite: { type: Type.STRING },
         },
         required: ['descripcion', 'responsable', 'fechaLimite'],
       },
     },
-    receptorNombre: { type: 'string' },
-    receptorDocumento: { type: 'string' },
-    tallaPantalon: { type: 'string' },
-    tallaCamisa: { type: 'string' },
-    tallaBota: { type: 'string' },
+    receptorNombre: { type: Type.STRING },
+    receptorDocumento: { type: Type.STRING },
+    tallaPantalon: { type: Type.STRING },
+    tallaCamisa: { type: Type.STRING },
+    tallaBota: { type: Type.STRING },
   },
   required: [
     'tipoDetectado',
@@ -89,7 +85,7 @@ const outputSchema = {
     'tallaCamisa',
     'tallaBota',
   ],
-} as const;
+};
 
 const extraccionSchema = z.object({
   tipoDetectado: z.enum(['general', 'entrega_dotacion']),
@@ -173,7 +169,7 @@ const toGeneralDraft = (parsed: ExtraccionModelo): ActaFormalDraft => ({
 });
 
 export async function POST(request: NextRequest) {
-  const apiKey = process.env.ANTHROPIC_API_KEY?.trim();
+  const apiKey = process.env.GEMINI_API_KEY?.trim();
   if (!apiKey) {
     return NextResponse.json({ disponible: false, motivo: 'IA no configurada' });
   }
@@ -204,27 +200,32 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'La nota es demasiado corta.' }, { status: 400 });
   }
 
-  const modelo = process.env.ACTAS_AI_MODEL?.trim() || DEFAULT_MODEL;
-  const client = new Anthropic({ apiKey });
+  const modelo = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
+  const ai = new GoogleGenAI({ apiKey });
 
   let parsed: ExtraccionModelo;
   try {
-    const response = await client.messages.create({
+    const response = await ai.models.generateContent({
       model: modelo,
-      max_tokens: 2000,
-      system: buildSystemPrompt(formato),
-      output_config: { format: { type: 'json_schema', schema: outputSchema } },
-      messages: [{ role: 'user', content: nota }],
+      contents: nota,
+      config: {
+        systemInstruction: buildSystemPrompt(formato),
+        responseMimeType: 'application/json',
+        responseSchema,
+        temperature: 0,
+        maxOutputTokens: 2048,
+      },
     });
 
-    if (response.stop_reason === 'refusal') {
-      return NextResponse.json({ disponible: true, ok: false, motivo: 'La solicitud fue rechazada.' });
+    const rawText = (response.text || '').trim();
+    if (!rawText) {
+      return NextResponse.json({
+        disponible: true,
+        ok: false,
+        motivo: 'La IA no devolvio datos.',
+      });
     }
 
-    const rawText = response.content
-      .map((block) => (block.type === 'text' ? block.text : ''))
-      .join('')
-      .trim();
     parsed = extraccionSchema.parse(JSON.parse(rawText));
   } catch (error) {
     console.error('No fue posible interpretar la nota con IA.', error);
