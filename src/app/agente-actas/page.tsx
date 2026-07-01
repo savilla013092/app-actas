@@ -292,6 +292,12 @@ export default function AgenteActasPage() {
         setSelectedActa(null);
         setSavedActaId(null);
 
+        // Si la IA dejo campos vacios, pasar a modo paso a paso para completarlos
+        // uno por uno SIN perder lo ya extraido (en modo Nota cada envio
+        // reinterpretaria toda la nota y reemplazaria el borrador).
+        const faltan = result.camposFaltantes;
+        setMode(faltan.length > 0 ? 'paso' : 'nota');
+
         if (tipo === 'entrega_dotacion' && result.entregaDotacion) {
           const entrega = result.entregaDotacion;
           setEntregaData(entrega);
@@ -308,12 +314,14 @@ export default function AgenteActasPage() {
                 ]
               : []),
             createMessage('agente', `Resumen:\n${buildEntregaSummary(entrega)}`),
-            createMessage(
-              'agente',
-              result.camposFaltantes.length > 0
-                ? `Faltan datos: ${result.camposFaltantes.join(', ')}. Puede dictar de nuevo o completar en el modo paso a paso.`
-                : 'Datos completos. Genere el borrador o envie a firma.'
-            ),
+            faltan.length > 0
+              ? createMessage(
+                  'agente',
+                  `Falta ${entregaCampoLabels[faltan[0] as keyof typeof entregaCampoLabels]}. ${getNextEntregaPrompt(
+                    entrega
+                  )} Responda aqui para completarlo (o dicte una nota nueva completa en Nota IA).`
+                )
+              : createMessage('agente', 'Datos completos. Genere el borrador o envie a firma.'),
           ]);
         } else {
           setEntregaData(emptyActaEntregaDotacionData);
@@ -322,12 +330,14 @@ export default function AgenteActasPage() {
             ...current,
             createMessage('agente', `Interprete la nota como acta formal (modelo ${result.modelo}).`),
             createMessage('agente', `Resumen:\n${buildDraftSummary(result.draft)}`),
-            createMessage(
-              'agente',
-              result.camposFaltantes.length > 0
-                ? `Faltan datos: ${result.camposFaltantes.join(', ')}. Puede dictar de nuevo o completar en el modo paso a paso.`
-                : 'Datos completos. Confirme con el boton de generar borrador.'
-            ),
+            faltan.length > 0
+              ? createMessage(
+                  'agente',
+                  `Falta ${campoLabels[faltan[0] as keyof typeof campoLabels]}. ${getNextPrompt(
+                    result.draft
+                  )} Responda aqui para completarlo (o dicte una nota nueva completa en Nota IA).`
+                )
+              : createMessage('agente', 'Datos completos. Confirme con el boton de generar borrador.'),
           ]);
         }
         return;
@@ -339,9 +349,12 @@ export default function AgenteActasPage() {
         const nextDraft = applyBulkAnswer(draft, nota);
         setDraft(nextDraft);
         setSelectedActa(null);
+        if (getMissingFields(nextDraft).length > 0) {
+          setMode('paso');
+        }
         setMessages((current) => [
           ...current,
-          createMessage('agente', `${motivo}. Use el modo basico para interpretar la nota.`),
+          createMessage('agente', `${motivo}. Complete los datos faltantes paso a paso.`),
         ]);
         appendAgentPrompt(nextDraft);
       } else {
