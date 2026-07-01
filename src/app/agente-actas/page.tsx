@@ -9,6 +9,7 @@ import {
   LucideLink,
   LucideMic,
   LucideMicOff,
+  LucidePenLine,
   LucidePlus,
   LucideSend,
   LucideSparkles,
@@ -43,6 +44,7 @@ import {
   generarActaFormalDocx,
   generarActaFormalPdf,
 } from '@/lib/actas-formales/documentGenerator';
+import { ActaFormalSignatureCapture } from '@/components/actas-formales/ActaFormalSignatureCapture';
 import { interpretarNotaActa } from '@/lib/actas-formales/aiExtraction';
 import {
   construirEnlaceFirma,
@@ -51,11 +53,14 @@ import {
   guardarBorradorActaFormal,
   marcarActaFormalCerrada,
   publicarActaFormalParaFirmas,
+  registrarFirmaPublica,
+  type FirmaPublicaPayload,
 } from '@/services/actaFormalService';
 import {
   ActaEntregaDotacionData,
   ActaFormal,
   ActaFormalDraft,
+  AsistenteActaFormal,
   FirmanteActaFormal,
   MensajeAsistenteActaFormal,
   TipoActaFormal,
@@ -151,6 +156,8 @@ export default function AgenteActasPage() {
   const [interpreting, setInterpreting] = useState(false);
   const [lookingTercero, setLookingTercero] = useState(false);
   const [closingActa, setClosingActa] = useState(false);
+  const [signingAsistente, setSigningAsistente] = useState<AsistenteActaFormal | null>(null);
+  const [savingFirma, setSavingFirma] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
 
   const missingFields = useMemo(() => getMissingFields(draft), [draft]);
@@ -562,6 +569,33 @@ export default function AgenteActasPage() {
     }
   };
 
+  const handleFirmarInline = async (asistente: AsistenteActaFormal, payload: FirmaPublicaPayload) => {
+    if (!selectedActa?.id || !asistente.token) {
+      toast({
+        title: 'Publique el acta primero',
+        description: 'Genere los enlaces de firma antes de firmar.',
+        variant: 'destructive',
+      });
+      return;
+    }
+
+    setSavingFirma(true);
+    try {
+      await registrarFirmaPublica(selectedActa.id, asistente.token, payload);
+      setSigningAsistente(null);
+      toast({ title: 'Firma registrada', description: `${asistente.nombre} firmo el acta.` });
+    } catch (error) {
+      console.error('No fue posible registrar la firma.', error);
+      toast({
+        title: 'No fue posible firmar',
+        description: 'Revise la conexion o los permisos de Firebase.',
+        variant: 'destructive',
+      });
+    } finally {
+      setSavingFirma(false);
+    }
+  };
+
   const handleSelectActa = (acta: ActaFormal) => {
     const nextFormato = acta.tipoFormato || 'general';
     setSelectedActa(acta);
@@ -877,15 +911,37 @@ export default function AgenteActasPage() {
                         </Badge>
                       </div>
                       {signer?.estado !== 'firmada' ? (
-                        <Button
-                          variant='outline'
-                          size='sm'
-                          className='mt-2 w-full'
-                          onClick={() => handleCopyLink(asistente.token)}
-                          leftIcon={<LucideCopy size={14} />}
-                        >
-                          Copiar enlace
-                        </Button>
+                        <div className='mt-2 space-y-2'>
+                          <div className='grid grid-cols-2 gap-2'>
+                            <Button
+                              size='sm'
+                              onClick={() =>
+                                setSigningAsistente((current) =>
+                                  current?.id === asistente.id ? null : asistente
+                                )
+                              }
+                              leftIcon={<LucidePenLine size={14} />}
+                            >
+                              {signingAsistente?.id === asistente.id ? 'Cerrar' : 'Firmar aqui'}
+                            </Button>
+                            <Button
+                              variant='outline'
+                              size='sm'
+                              onClick={() => handleCopyLink(asistente.token)}
+                              leftIcon={<LucideCopy size={14} />}
+                            >
+                              Enlace
+                            </Button>
+                          </div>
+                          {signingAsistente?.id === asistente.id ? (
+                            <ActaFormalSignatureCapture
+                              signerName={asistente.nombre}
+                              signerRole={asistente.cargo}
+                              saving={savingFirma}
+                              onSave={(payload) => handleFirmarInline(asistente, payload)}
+                            />
+                          ) : null}
+                        </div>
                       ) : (
                         <p className='mt-2 text-xs text-muted-foreground'>
                           {signer.fechaFirma ? `Firmo: ${signer.fechaFirma.toLocaleString('es-CO')}` : 'Firma registrada'}

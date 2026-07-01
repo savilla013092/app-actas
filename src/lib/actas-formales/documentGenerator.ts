@@ -3,7 +3,6 @@ import { ActaEntregaDotacionData, ActaFormal, ActaFormalDraft, FirmanteActaForma
 const HEADER_PATH = '/actas-formales/header-serviciudad.png';
 const FOOTER_PATH = '/actas-formales/footer-serviciudad.png';
 const ENTREGA_TEMPLATE_PATH = '/actas-formales/formato-acta-entrega.docx';
-const ENTREGA_DOTACION_IMAGE_PATH = '/actas-formales/entrega-dotacion.jpg';
 const ENTREGA_FIXED_SIGNATURE_PATH = '/actas-formales/firma-santiago-villa.png';
 
 const CONTENT_WIDTH = 8838;
@@ -640,6 +639,34 @@ function buildEntregaReceiverSignatureRun(firmante?: FirmanteActaFormal) {
   return '';
 }
 
+/**
+ * Quita la segunda columna ("IMAGEN") de la tabla de dotacion de la plantilla,
+ * incluyendo la imagen que contiene, para que quede una tabla limpia
+ * (No | CANTIDAD | DESCRIPCION). Opera en tiempo de ejecucion sobre el XML.
+ */
+function removeEntregaImageColumn(documentXml: string): string {
+  const tablaMatch = documentXml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/);
+  if (!tablaMatch) return documentXml;
+
+  let tabla = tablaMatch[0];
+
+  const gridMatch = tabla.match(/<w:tblGrid>[\s\S]*?<\/w:tblGrid>/);
+  if (gridMatch) {
+    const cols = gridMatch[0].match(/<w:gridCol[^>]*\/?>/g) || [];
+    if (cols.length >= 2) {
+      tabla = tabla.replace(gridMatch[0], gridMatch[0].replace(cols[1], ''));
+    }
+  }
+
+  tabla = tabla.replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, (fila) => {
+    const celdas = fila.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+    if (!celdas || celdas.length < 2) return fila;
+    return fila.replace(celdas[1], '');
+  });
+
+  return documentXml.replace(tablaMatch[0], tabla);
+}
+
 export async function generarActaEntregaDotacionDocx({
   data,
   firmantes,
@@ -717,6 +744,8 @@ export async function generarActaEntregaDotacionDocx({
     }
   }
 
+  documentXml = removeEntregaImageColumn(documentXml);
+
   zip.file('word/document.xml', documentXml);
   const blob = await zip.generateAsync({
     type: 'blob',
@@ -737,10 +766,9 @@ export async function generarActaEntregaDotacionPdf({
     import('jspdf'),
     import('jspdf-autotable'),
   ]);
-  const [headerDataUrl, footerDataUrl, dotacionDataUrl, fixedSignatureDataUrl] = await Promise.all([
+  const [headerDataUrl, footerDataUrl, fixedSignatureDataUrl] = await Promise.all([
     fetchDataUrl(HEADER_PATH),
     fetchDataUrl(FOOTER_PATH),
-    fetchDataUrl(ENTREGA_DOTACION_IMAGE_PATH),
     fetchDataUrl(ENTREGA_FIXED_SIGNATURE_PATH),
   ]);
   const doc = new jsPDF('p', 'pt', 'letter');
@@ -767,24 +795,18 @@ export async function generarActaEntregaDotacionPdf({
     startY: y,
     margin: { left: 58, right: 58 },
     theme: 'grid',
-    styles: { font: 'helvetica', fontSize: 9, lineColor: [0, 0, 0], lineWidth: 0.4, cellPadding: 4 },
-    head: [['No', 'IMAGEN', 'CANTIDADES', 'DESCRIPCION']],
-    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold' },
+    styles: { font: 'helvetica', fontSize: 10, lineColor: [0, 0, 0], lineWidth: 0.4, cellPadding: 6 },
+    head: [['No', 'CANTIDAD', 'DESCRIPCION']],
+    headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
     body: [
-      ['1', '', '1', `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`],
-      ['2', '', '1', `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`],
-      ['3', '', '1', `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`],
+      ['1', '1', `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`],
+      ['2', '1', `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`],
+      ['3', '1', `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`],
     ],
-    didDrawCell: (cellData) => {
-      if (cellData.section === 'body' && cellData.column.index === 1 && cellData.row.index === 0) {
-        doc.addImage(dotacionDataUrl, 'JPEG', cellData.cell.x + 12, cellData.cell.y + 8, 88, 76, undefined, 'FAST');
-      }
-    },
     columnStyles: {
-      0: { halign: 'center', cellWidth: 36 },
-      1: { halign: 'center', cellWidth: 120 },
-      2: { halign: 'center', cellWidth: 78 },
-      3: { cellWidth: 262 },
+      0: { halign: 'center', cellWidth: 40 },
+      1: { halign: 'center', cellWidth: 90 },
+      2: { cellWidth: 366 },
     },
   });
   y = ((doc as unknown as { lastAutoTable?: { finalY: number } }).lastAutoTable?.finalY || y) + 22;
