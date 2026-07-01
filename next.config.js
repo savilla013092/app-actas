@@ -1,4 +1,15 @@
-﻿/** @type {import('next').NextConfig} */
+const withPWA = require('@ducanh2912/next-pwa').default({
+  dest: 'public',
+  register: true,
+  cacheOnFrontEndNav: true,
+  disable: process.env.NODE_ENV === 'development',
+  workboxOptions: {
+    // No usar el app-shell offline para rutas de API (Firestore/IA requieren red).
+    navigateFallbackDenylist: [/^\/api\//],
+  },
+});
+
+/** @type {import('next').NextConfig} */
 const nextConfig = {
   reactStrictMode: true,
   images: {
@@ -14,4 +25,4 @@ const nextConfig = {
   },
 };
 
-module.exports = nextConfig;
+module.exports = withPWA(nextConfig);

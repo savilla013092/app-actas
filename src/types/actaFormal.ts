@@ -80,3 +80,39 @@ export interface MensajeAsistenteActaFormal {
   texto: string;
   creadoEn: Date;
 }
+
+export type FormatoSolicitadoExtraccion = 'general' | 'entrega_dotacion' | 'auto';
+
+export interface TerceroSugeridoExtraccion {
+  nombre: string;
+  documento: string;
+  dv?: string;
+  score: number;
+}
+
+export interface ExtraccionActaExitosa {
+  disponible: true;
+  ok: true;
+  tipoDetectado: TipoActaFormal;
+  draft: ActaFormalDraft;
+  entregaDotacion?: ActaEntregaDotacionData;
+  camposFaltantes: string[];
+  terceroSugerido?: TerceroSugeridoExtraccion | null;
+  modelo: string;
+}
+
+export interface ExtraccionActaNoDisponible {
+  disponible: false;
+  motivo: string;
+}
+
+export interface ExtraccionActaError {
+  disponible: true;
+  ok: false;
+  motivo: string;
+}
+
+export type ResultadoExtraccionActa =
+  | ExtraccionActaExitosa
+  | ExtraccionActaNoDisponible
+  | ExtraccionActaError;

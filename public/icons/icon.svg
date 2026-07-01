@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-label="Actas SERVICIUDAD">
+  <rect width="512" height="512" rx="96" fill="#0056b2"/>
+  <g fill="none" stroke="#ffffff" stroke-width="22" stroke-linecap="round" stroke-linejoin="round">
+    <rect x="150" y="120" width="212" height="272" rx="24" fill="#ffffff" stroke="none"/>
+    <line x1="188" y1="182" x2="324" y2="182" stroke="#0056b2"/>
+    <line x1="188" y1="230" x2="324" y2="230" stroke="#0056b2"/>
+    <line x1="188" y1="278" x2="270" y2="278" stroke="#0056b2"/>
+  </g>
+  <circle cx="330" cy="322" r="66" fill="#1c9d54"/>
+  <path d="M302 322l20 20 40-44" fill="none" stroke="#ffffff" stroke-width="20" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>

@@ -7,6 +7,14 @@ node_modules/
 .next/
 out/
 
+# PWA (generado por next-pwa)
+public/sw.js
+public/sw.js.map
+public/workbox-*.js
+public/workbox-*.js.map
+public/fallback-*.js
+public/swe-worker-*.js
+
 # Production
 build/
 dist/

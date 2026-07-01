@@ -1,4 +1,4 @@
-import type { Metadata } from "next";
+import type { Metadata, Viewport } from "next";
 import { Inter } from "next/font/google";
 import "./globals.css";
 import { Toaster } from "@/components/ui/toast";
@@ -26,10 +26,25 @@ export const metadata: Metadata = {
     title: "Sistema de Actas de Revisión de Activos Fijos",
     description: "Automatización de actas de revisión de activos fijos con evidencia fotográfica y firma digital",
   },
+  manifest: "/manifest.webmanifest",
+  appleWebApp: {
+    capable: true,
+    statusBarStyle: "default",
+    title: "Actas SC",
+  },
   icons: {
-    icon: "/logo-serviciudad.png",
+    icon: [
+      { url: "/icons/icon.svg", type: "image/svg+xml" },
+      { url: "/logo-serviciudad.png" },
+    ],
     apple: "/logo-serviciudad.png",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: "#0056b2",
+  width: "device-width",
+  initialScale: 1,
 };
 
 export default function RootLayout({

@@ -4,95 +4,134 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Sistema de Actas de Revisión de Activos Fijos for SERVICIUDAD ESP. A web application that automates fixed asset revision records with photographic evidence and dual digital signatures (Logistics Professional + Custodian).
+Plataforma web de **SERVICIUDAD ESP** (Dosquebradas) para gestionar activos fijos y **generar actas de forma agéntica**. Cubre tres flujos principales:
+
+1. **Revisiones de activos** con evidencia fotográfica y **firma digital dual** (Profesional de Logística + Custodio).
+2. **Agente de actas** (`/agente-actas`): genera actas **formales** (reuniones/comités) y de **entrega de dotación** a partir de una nota dictada o escrita, con extracción por IA y respaldo determinista.
+3. **Préstamos exprés** de activos (`/express-loans`).
 
 ## Commands
 
 ```bash
-# Development
-npm run dev              # Start Next.js development server
-npm run build            # Build for production
-npm run lint             # Run ESLint
+# Desarrollo
+npm run dev              # Servidor de desarrollo Next.js
+npm run build            # Build de producción (incluye service worker PWA)
+npm run lint             # ESLint
+npx tsc --noEmit         # Chequeo de tipos
+
+# Pruebas
+npm test                 # Smoke tests (tests/smoke/repository-guards.run.mjs)
+npm run test:rules       # Reglas de Firestore contra el emulador
+npm run test:smoke:roles # Smoke de acceso por rol contra el emulador
 
 # Firebase
-npm run firebase:emulators   # Start Firebase local emulators
-npm run firebase:deploy      # Deploy to Firebase
+npm run firebase:emulators   # Emuladores locales
+npm run firebase:deploy      # Deploy de Firestore/Functions/Storage (NO hosting web)
+
+# Utilidades
+npm run terceros:catalogo    # Regenera src/lib/actas-formales/tercerosCatalog.json
 ```
+
+## Deployment
+
+- **Web (Next.js SSR + API routes):** se despliega en **Vercel** (proyecto `app-actas-serviciudad`). Producción se publica desde la rama `main`.
+- **Firebase:** solo backend — Firestore (reglas + índices), Cloud Functions y Storage (reglas). `firebase.json` **no** define `hosting` (se eliminó para evitar conflictos con el SSR de Vercel).
+- Las variables `NEXT_PUBLIC_FIREBASE_*` y las de IA (`ANTHROPIC_API_KEY`, `ACTAS_AI_MODEL`) deben configurarse en Vercel.
 
 ## Architecture
 
 ### Tech Stack
-- **Frontend**: Next.js 14 (App Router) + TypeScript + TailwindCSS
-- **Backend**: Firebase (Firestore, Auth, Storage, Cloud Functions)
-- **State**: Zustand (`src/stores/authStore.ts`)
-- **Forms**: React Hook Form + Zod validation
-- **Signature**: react-signature-canvas
+- **Frontend:** Next.js 14 (App Router) + TypeScript + TailwindCSS. PWA instalable vía `@ducanh2912/next-pwa`.
+- **Backend:** Firebase (Firestore, Auth, Storage, Cloud Functions). Verificación de ID token en el servidor con `firebase-admin`.
+- **IA:** `@anthropic-ai/sdk` (Claude) en rutas de servidor para extracción estructurada.
+- **Estado:** Zustand (`src/stores/authStore.ts`). **Formularios:** React Hook Form + Zod. **Firma:** react-signature-canvas.
+- **Documentos:** `docx` y `jspdf` (cliente); `pdfkit` en Cloud Functions.
 
 ### Project Structure
 ```
-APP_ACTAS/
-├── src/                    # Main application source
-│   ├── app/                # Next.js App Router pages
-│   │   ├── auth/login/     # Login page
-│   │   ├── dashboard/      # Main dashboard
-│   │   ├── activos/        # Asset management pages
-│   │   └── revision/       # Revision workflow pages
-│   ├── components/
-│   │   ├── ui/             # Reusable UI components
-│   │   ├── forms/          # Form components
-│   │   ├── layout/         # Layout components (AuthGuard)
-│   │   ├── signature/      # SignaturePad component
-│   │   └── revision/       # Revision-specific components
-│   ├── lib/
-│   │   ├── firebase/config.ts  # Firebase initialization
-│   │   └── utils/          # Utilities (cn, hash)
-│   ├── services/           # Firestore service layer
-│   ├── stores/             # Zustand stores
-│   ├── hooks/              # Custom hooks
-│   └── types/              # TypeScript type definitions
-├── scripts/                # Utility scripts
-│   ├── importar-activos.js # Import assets from Excel
-│   └── limpiar-datos.js    # Data cleanup utilities
-├── functions/              # Firebase Cloud Functions
-├── docs/                   # Documentation
-│   └── GUIA_IMPORTACION.md # Asset import guide
-├── data/                   # Data files (git-ignored)
-│   └── Listado_activos.xlsx # Current assets list
-└── ... (config files)
+src/
+├── app/                      # App Router
+│   ├── agente-actas/         # Agente de actas (formal + dotación, IA + respaldo)
+│   ├── activos/              # Gestión de activos
+│   ├── admin/importar/       # Importación de activos
+│   ├── auth/login/           # Login
+│   ├── dashboard/            # Panel principal
+│   ├── express-loans/        # Préstamos exprés
+│   ├── firmar-acta/[actaId]/[token]/  # Firma pública por asistente
+│   ├── revision/[id]/        # Flujo de revisión
+│   └── api/
+│       ├── actas/extraer/    # POST: extracción de nota → borrador (Claude + Zod)
+│       ├── health/           # Estado de configuración Firebase
+│       ├── seed/             # Seed de demo (solo dev)
+│       └── terceros/         # Búsqueda difusa de terceros por nombre
+├── components/               # ui/, forms/, layout/, signature/, revision/, actas-formales/, charts/, filters/
+├── lib/
+│   ├── firebase/config.ts    # Firebase cliente
+│   ├── firebase/admin.ts     # firebase-admin (verificación de ID token)
+│   ├── actas-formales/       # conversation.ts, documentGenerator.ts, aiExtraction.ts, tercerosLookup.ts, tercerosCatalog.json
+│   ├── constants/            # catálogos de clasificación y ubicación
+│   └── utils/                # cn, hash, clasificación/búsqueda de activos, export
+├── services/                 # Capa Firestore (activo, revisión, asignación, actaFormal, expressLoan, ...)
+├── stores/                   # authStore (Zustand)
+├── hooks/                    # useAuth
+└── types/                    # activo, revision, acta, actaFormal, expressLoan, usuario, asignacion
+
+functions/src/                # Cloud Functions (ver abajo)
+tests/                        # smoke/ (guards, roles) y rules/ (Firestore/Storage vía emulador)
+public/                       # estáticos, manifest.webmanifest, icons/, actas-formales/ (plantillas e imágenes)
+data/                         # git-ignored (fuentes .xlsx y documentos de referencia)
 ```
 
-**Note**: Firebase credentials (`service-account.json`) should be stored outside the project in `C:\Users\<user>\firebase-credentials\`
+**Nota:** credenciales sensibles fuera del proyecto (p. ej. `C:\Users\<user>\firebase-credentials\`). No commitear `service-account.json`.
 
 ### Path Alias
-Use `@/*` for imports from `src/` directory.
+`@/*` → `src/*`.
 
 ### User Roles
-- **admin**: Full access to users, assets, revisions, reports
-- **logistica**: Create revisions, sign as reviewer, view all assets
-- **custodio**: View assigned assets, sign pending revision records
+- **admin:** acceso total (usuarios, activos, revisiones, reportes).
+- **logistica:** crea revisiones, firma como revisor, ve todos los activos.
+- **custodio:** ve activos asignados, firma revisiones pendientes.
 
-### Dual Signature Flow
-1. Logistics Professional creates revision with evidence photos
-2. Signs as reviewer → state becomes `pendiente_firma_custodio`
-3. Custodian reviews and signs → state becomes `firmada_completa`
-4. Cloud Function generates PDF with institutional format
+## Agente de actas (`/agente-actas`)
 
-### Revision States
-`borrador` → `pendiente_firma_custodio` → `firmada_completa` → `completada`
+Página cliente que arma dos tipos de acta:
+- **Formal** (`tipoFormato: 'general'`): fecha, hora, lugar, tipo de reunión, asistentes, objetivo, orden del día, desarrollo, conclusiones, compromisos.
+- **Entrega de dotación** (`tipoFormato: 'entrega_dotacion'`): formato **preconfigurado** (lugar, objetivo y textos fijos en `buildEntregaDraft`); solo pide fecha, receptor, documento y tallas.
+
+Tres modos de captura (`src/app/agente-actas/page.tsx`):
+- **Nota IA** (por defecto): se dicta/pega una sola nota; `POST /api/actas/extraer` la interpreta con Claude (`messages.create` + `output_config.format` JSON schema, validado con Zod) y rellena el borrador. Reusa `tercerosLookup` para resolver la cédula por nombre.
+- **Paso a paso** y **En bloque**: parser determinista en `src/lib/actas-formales/conversation.ts` (regex).
+
+**Diseño híbrido:** si `ANTHROPIC_API_KEY` no está configurada o la IA falla, el modo Nota cae automáticamente al parser determinista. El dictado usa la Web Speech API del navegador (`es-CO`).
+
+**Firmas:** el acta se publica generando un enlace por asistente (`/firmar-acta/[actaId]/[token]`); al completarse todas las firmas se cierra (`marcarActaFormalCerrada`). Descarga en Word/PDF vía `documentGenerator.ts`.
+
+### Variables de entorno de IA (solo servidor, sin `NEXT_PUBLIC_`)
+- `ANTHROPIC_API_KEY` — sin ella el modo Nota usa el respaldo determinista.
+- `ACTAS_AI_MODEL` — modelo de Claude (default `claude-haiku-4-5`; alternativa `claude-sonnet-4-6`).
+- `FIREBASE_ADMIN_CREDENTIALS` — opcional (JSON o base64). La verificación del ID token funciona solo con el `projectId`.
+
+## Dual Signature Flow (revisiones)
+1. Logística crea la revisión con evidencia → firma como revisor → `pendiente_firma_custodio`.
+2. Custodio revisa y firma → `firmada_completa`.
+3. Cloud Function genera el PDF institucional.
+
+Estados de revisión: `borrador` → `pendiente_firma_custodio` → `firmada_completa` → `completada`.
+Estados de acta formal: `borrador` → `pendiente_firmas` → `cerrada` (o `anulada`).
 
 ### Firestore Collections
-- `usuarios` - User profiles linked to Firebase Auth
-- `activos` - Fixed assets with custodian assignments
-- `revisiones` - Revision records with evidence and signatures
-- `consecutivos` - Auto-increment counters (Cloud Functions only)
-- `auditoria` - Audit logs (Cloud Functions only)
+- `usuarios`, `activos`, `revisiones`, `actas_formales` (+ subcolección `firmantes`), `express_loans`.
+- `consecutivos` y `auditoria`: **solo Cloud Functions**.
 
-### Firebase Configuration
-Environment variables required (prefix `NEXT_PUBLIC_FIREBASE_`):
-- API_KEY, AUTH_DOMAIN, PROJECT_ID, STORAGE_BUCKET, MESSAGING_SENDER_ID, APP_ID
+### Cloud Functions (`functions/src/`)
+- `revisionCallables.ts`, `assetCallables.ts`, `assignmentCallables.ts`, `userCallables.ts` — operaciones privilegiadas (crear/actualizar/firmar, subir evidencia, gestionar usuarios).
+- `generarActaPDF.ts`, `generarActaAsignacionPDF.ts` — triggers que generan PDF al firmar.
+- `triggers.ts` — sincroniza índices de búsqueda y claims de auth.
+- `consecutivos.ts`, `assetCatalogs.ts`, `security.ts` (guards de rol), `index.ts`.
 
 ### Security Rules
-Firestore rules in `firestore.rules` implement role-based access:
-- Custodians can only sign revisions for their own assets
-- Only logistics can create revisions
-- Consecutive numbers and audit logs are Cloud Functions only
+`firestore.rules` implementa acceso por rol:
+- Custodios solo firman revisiones de sus propios activos.
+- Solo logística crea revisiones.
+- Consecutivos y auditoría son exclusivos de Cloud Functions.
+- El endpoint `/api/actas/extraer` exige ID token de Firebase válido antes de llamar a la IA.

@@ -1,0 +1,29 @@
+{
+  "name": "Sistema de Actas - SERVICIUDAD ESP",
+  "short_name": "Actas SC",
+  "description": "Generacion agentica de actas (formales y de entrega de dotacion) con firma digital para SERVICIUDAD ESP.",
+  "id": "/",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "es-CO",
+  "dir": "ltr",
+  "background_color": "#f7f9fc",
+  "theme_color": "#0056b2",
+  "categories": ["business", "productivity"],
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-maskable.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "maskable"
+    }
+  ]
+}

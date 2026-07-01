@@ -43,6 +43,7 @@ import {
   generarActaFormalDocx,
   generarActaFormalPdf,
 } from '@/lib/actas-formales/documentGenerator';
+import { interpretarNotaActa } from '@/lib/actas-formales/aiExtraction';
 import {
   construirEnlaceFirma,
   escucharFirmantesActaFormal,
@@ -60,7 +61,7 @@ import {
   TipoActaFormal,
 } from '@/types/actaFormal';
 
-type CaptureMode = 'paso' | 'bloque';
+type CaptureMode = 'paso' | 'bloque' | 'nota';
 
 type TerceroApiMatch = {
   nombre: string;
@@ -96,7 +97,7 @@ const createMessage = (autor: MensajeAsistenteActaFormal['autor'], texto: string
 const initialMessages = [
   createMessage(
     'agente',
-    'Estoy listo para construir el acta formal. Puede responder paso a paso o pegar todos los datos en bloque.'
+    'Estoy listo para construir el acta formal. Dicte o pegue una sola nota (modo Nota IA) y extraigo los datos; tambien puede responder paso a paso o en bloque.'
   ),
   createMessage('agente', getNextPrompt(emptyActaFormalDraft)),
 ];
@@ -104,7 +105,7 @@ const initialMessages = [
 const initialEntregaMessages = [
   createMessage(
     'agente',
-    'Acta de entrega seleccionada. Este formato es fijo; solo actualizare fecha, persona que recibe/firma y tallas.'
+    'Acta de entrega seleccionada. Dicte o pegue una nota (modo Nota IA) con fecha, persona que recibe y tallas; tambien puede completar paso a paso.'
   ),
   createMessage('agente', getNextEntregaPrompt(emptyActaEntregaDotacionData)),
 ];
@@ -134,7 +135,7 @@ const estadoBadge = (estado: ActaFormal['estado']) => {
 export default function AgenteActasPage() {
   const { user } = useAuth();
   const [formato, setFormato] = useState<TipoActaFormal>('general');
-  const [mode, setMode] = useState<CaptureMode>('paso');
+  const [mode, setMode] = useState<CaptureMode>('nota');
   const [draft, setDraft] = useState<ActaFormalDraft>(emptyActaFormalDraft);
   const [entregaData, setEntregaData] = useState<ActaEntregaDotacionData>(emptyActaEntregaDotacionData);
   const [messages, setMessages] = useState<MensajeAsistenteActaFormal[]>(initialMessages);
@@ -147,6 +148,7 @@ export default function AgenteActasPage() {
   const [publishing, setPublishing] = useState(false);
   const [downloading, setDownloading] = useState<'docx' | 'pdf' | null>(null);
   const [listening, setListening] = useState(false);
+  const [interpreting, setInterpreting] = useState(false);
   const [lookingTercero, setLookingTercero] = useState(false);
   const [closingActa, setClosingActa] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
@@ -271,12 +273,100 @@ export default function AgenteActasPage() {
     return response.json();
   };
 
+  const handleInterpretarNota = async (nota: string) => {
+    setInterpreting(true);
+    try {
+      // 'auto': la IA decide si es acta formal o de entrega de dotacion.
+      const result = await interpretarNotaActa(nota, 'auto');
+
+      if (result.disponible && result.ok) {
+        const tipo = result.tipoDetectado;
+        setFormato(tipo);
+        setSelectedActa(null);
+        setSavedActaId(null);
+
+        if (tipo === 'entrega_dotacion' && result.entregaDotacion) {
+          const entrega = result.entregaDotacion;
+          setEntregaData(entrega);
+          setDraft(result.draft);
+          setMessages((current) => [
+            ...current,
+            createMessage('agente', `Interprete la nota como acta de entrega (modelo ${result.modelo}).`),
+            ...(result.terceroSugerido
+              ? [
+                  createMessage(
+                    'agente',
+                    `Identificacion sugerida en terceros: ${result.terceroSugerido.documento} (${result.terceroSugerido.nombre}).`
+                  ),
+                ]
+              : []),
+            createMessage('agente', `Resumen:\n${buildEntregaSummary(entrega)}`),
+            createMessage(
+              'agente',
+              result.camposFaltantes.length > 0
+                ? `Faltan datos: ${result.camposFaltantes.join(', ')}. Puede dictar de nuevo o completar en el modo paso a paso.`
+                : 'Datos completos. Genere el borrador o envie a firma.'
+            ),
+          ]);
+        } else {
+          setEntregaData(emptyActaEntregaDotacionData);
+          setDraft(result.draft);
+          setMessages((current) => [
+            ...current,
+            createMessage('agente', `Interprete la nota como acta formal (modelo ${result.modelo}).`),
+            createMessage('agente', `Resumen:\n${buildDraftSummary(result.draft)}`),
+            createMessage(
+              'agente',
+              result.camposFaltantes.length > 0
+                ? `Faltan datos: ${result.camposFaltantes.join(', ')}. Puede dictar de nuevo o completar en el modo paso a paso.`
+                : 'Datos completos. Confirme con el boton de generar borrador.'
+            ),
+          ]);
+        }
+        return;
+      }
+
+      const motivo = 'motivo' in result ? result.motivo : 'IA no disponible';
+
+      if (formato === 'general') {
+        const nextDraft = applyBulkAnswer(draft, nota);
+        setDraft(nextDraft);
+        setSelectedActa(null);
+        setMessages((current) => [
+          ...current,
+          createMessage('agente', `${motivo}. Use el modo basico para interpretar la nota.`),
+        ]);
+        appendAgentPrompt(nextDraft);
+      } else {
+        setMode('paso');
+        setMessages((current) => [
+          ...current,
+          createMessage('agente', `${motivo}. Complete el acta de entrega paso a paso.`),
+        ]);
+      }
+    } catch (error) {
+      console.error('No fue posible interpretar la nota.', error);
+      toast({
+        title: 'No fue posible interpretar',
+        description: 'Intente de nuevo o use el modo manual.',
+        variant: 'destructive',
+      });
+    } finally {
+      setInterpreting(false);
+    }
+  };
+
   const handleSend = async () => {
     const answer = input.trim();
     if (!answer) return;
 
     setMessages((current) => [...current, createMessage('usuario', answer)]);
     setInput('');
+
+    if (mode === 'nota') {
+      await handleInterpretarNota(answer);
+      return;
+    }
 
     if (isEntrega) {
       let nextData = nextEntregaField
@@ -493,7 +583,7 @@ export default function AgenteActasPage() {
     setSavedActaId(null);
     setFirmantes([]);
     setInput('');
-    setMode('paso');
+    setMode('nota');
     setMessages(nextFormato === 'entrega_dotacion' ? initialEntregaMessages : initialMessages);
   };
 
@@ -596,17 +686,21 @@ export default function AgenteActasPage() {
                   {canGenerate ? 'Datos completos' : `${activeMissingCount} dato(s) pendiente(s)`}
                 </p>
               </div>
-              {!isEntrega ? (
-                <div className='grid grid-cols-2 gap-1 rounded-lg border border-border bg-muted p-1'>
-                  <button
-                    type='button'
-                    onClick={() => setMode('paso')}
-                    className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
-                      mode === 'paso' ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'
-                    }`}
-                  >
-                    Paso a paso
-                  </button>
+              <div
+                className={`grid ${
+                  isEntrega ? 'grid-cols-2' : 'grid-cols-3'
+                } gap-1 rounded-lg border border-border bg-muted p-1`}
+              >
+                <button
+                  type='button'
+                  onClick={() => setMode('paso')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                    mode === 'paso' ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'
+                  }`}
+                >
+                  Paso a paso
+                </button>
+                {!isEntrega ? (
                   <button
                     type='button'
                     onClick={() => setMode('bloque')}
@@ -616,10 +710,17 @@ export default function AgenteActasPage() {
                   >
                     En bloque
                   </button>
-                </div>
-              ) : (
-                <Badge variant='info'>Formato fijo</Badge>
-              )}
+                ) : null}
+                <button
+                  type='button'
+                  onClick={() => setMode('nota')}
+                  className={`rounded-md px-3 py-1.5 text-xs font-semibold ${
+                    mode === 'nota' ? 'bg-card text-primary shadow-sm' : 'text-muted-foreground'
+                  }`}
+                >
+                  Nota IA
+                </button>
+              </div>
             </div>
           </div>
 
@@ -648,7 +749,9 @@ export default function AgenteActasPage() {
                 value={input}
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={
-                  isEntrega
+                  mode === 'nota'
+                    ? 'Dicte o pegue una sola nota. Ej: "acta de entrega para Juan Perez, cedula 1088..., pantalon 34, camisa M, bota 42". La IA extrae los datos.'
+                    : isEntrega
                     ? nextEntregaField
                       ? getNextEntregaPrompt(entregaData)
                       : 'Datos completos. Genere el borrador o envie a firma.'
@@ -679,10 +782,19 @@ export default function AgenteActasPage() {
                   type='button'
                   size='icon'
                   onClick={() => void handleSend()}
-                  title={lookingTercero ? 'Consultando terceros' : 'Enviar'}
-                  disabled={lookingTercero}
+                  title={
+                    interpreting
+                      ? 'Interpretando nota'
+                      : lookingTercero
+                      ? 'Consultando terceros'
+                      : mode === 'nota'
+                      ? 'Interpretar nota'
+                      : 'Enviar'
+                  }
+                  loading={interpreting}
+                  disabled={lookingTercero || interpreting}
                 >
-                  <LucideSend size={18} />
+                  {mode === 'nota' ? <LucideSparkles size={18} /> : <LucideSend size={18} />}
                 </Button>
               </div>
             </div>
