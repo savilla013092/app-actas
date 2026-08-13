@@ -53,6 +53,9 @@ export interface ActaEntregaDotacionData {
   tallaPantalon: string;
   tallaCamisa: string;
   tallaBota: string;
+  cantidadPantalon?: string;
+  cantidadCamisa?: string;
+  cantidadBota?: string;
 }
 
 export interface FirmanteActaFormal {

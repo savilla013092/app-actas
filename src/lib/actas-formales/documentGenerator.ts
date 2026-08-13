@@ -1,3 +1,4 @@
+import { normalizarCantidad } from '@/lib/actas-formales/conversation';
 import { ActaEntregaDotacionData, ActaFormal, ActaFormalDraft, FirmanteActaFormal } from '@/types/actaFormal';
 
 const HEADER_PATH = '/actas-formales/header-serviciudad.png';
@@ -640,11 +641,12 @@ function buildEntregaReceiverSignatureRun(firmante?: FirmanteActaFormal) {
 }
 
 /**
- * Quita la segunda columna ("IMAGEN") de la tabla de dotacion de la plantilla,
- * incluyendo la imagen que contiene, para que quede una tabla limpia
- * (No | CANTIDAD | DESCRIPCION). Opera en tiempo de ejecucion sobre el XML.
+ * Ajusta la tabla de dotacion de la plantilla en tiempo de ejecucion:
+ * 1) quita la columna "IMAGEN" (y la imagen que contiene) para dejar una tabla
+ *    limpia (No | CANTIDADES | DESCRIPCION);
+ * 2) escribe la cantidad real de cada item en la columna de cantidades.
  */
-function removeEntregaImageColumn(documentXml: string): string {
+function ajustarTablaEntrega(documentXml: string, cantidades: string[]): string {
   const tablaMatch = documentXml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/);
   if (!tablaMatch) return documentXml;
 
@@ -658,10 +660,31 @@ function removeEntregaImageColumn(documentXml: string): string {
     }
   }
 
+  let filaIndex = -1;
   tabla = tabla.replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, (fila) => {
+    filaIndex += 1;
+
     const celdas = fila.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
     if (!celdas || celdas.length < 2) return fila;
-    return fila.replace(celdas[1], '');
+
+    // 1) Quitar la celda de la columna IMAGEN.
+    let nuevaFila = fila.replace(celdas[1], '');
+
+    // 2) En las filas de datos, fijar la cantidad (ahora es la celda indice 1).
+    const cantidad = cantidades[filaIndex - 1];
+    if (filaIndex > 0 && cantidad) {
+      const celdasRestantes = nuevaFila.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
+      const celdaCantidad = celdasRestantes?.[1];
+      if (celdaCantidad) {
+        const celdaActualizada = celdaCantidad.replace(
+          /(<w:t(?:\s[^>]*)?>)[^<]*(<\/w:t>)/,
+          `$1${xmlEscape(cantidad)}$2`
+        );
+        nuevaFila = nuevaFila.replace(celdaCantidad, celdaActualizada);
+      }
+    }
+
+    return nuevaFila;
   });
 
   return documentXml.replace(tablaMatch[0], tabla);
@@ -744,7 +767,11 @@ export async function generarActaEntregaDotacionDocx({
     }
   }
 
-  documentXml = removeEntregaImageColumn(documentXml);
+  documentXml = ajustarTablaEntrega(documentXml, [
+    normalizarCantidad(data.cantidadPantalon),
+    normalizarCantidad(data.cantidadCamisa),
+    normalizarCantidad(data.cantidadBota),
+  ]);
 
   zip.file('word/document.xml', documentXml);
   const blob = await zip.generateAsync({
@@ -799,9 +826,13 @@ export async function generarActaEntregaDotacionPdf({
     head: [['No', 'CANTIDAD', 'DESCRIPCION']],
     headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
     body: [
-      ['1', '1', `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`],
-      ['2', '1', `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`],
-      ['3', '1', `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`],
+      ['1', normalizarCantidad(data.cantidadPantalon), `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`],
+      ['2', normalizarCantidad(data.cantidadCamisa), `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`],
+      [
+        '3',
+        normalizarCantidad(data.cantidadBota),
+        `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`,
+      ],
     ],
     columnStyles: {
       0: { halign: 'center', cellWidth: 40 },

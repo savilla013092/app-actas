@@ -284,7 +284,12 @@ export default function AgenteActasPage() {
     setInterpreting(true);
     try {
       // 'auto': la IA decide si es acta formal o de entrega de dotacion.
-      const result = await interpretarNotaActa(nota, 'auto');
+      // Se envia el acta en progreso para que una segunda nota la complete o
+      // corrija en vez de duplicar la informacion.
+      const result = await interpretarNotaActa(nota, 'auto', {
+        entregaActual: isEntrega ? entregaData : null,
+        draftActual: isEntrega ? null : draft,
+      });
 
       if (result.disponible && result.ok) {
         const tipo = result.tipoDetectado;
@@ -292,11 +297,10 @@ export default function AgenteActasPage() {
         setSelectedActa(null);
         setSavedActaId(null);
 
-        // Si la IA dejo campos vacios, pasar a modo paso a paso para completarlos
-        // uno por uno SIN perder lo ya extraido (en modo Nota cada envio
-        // reinterpretaria toda la nota y reemplazaria el borrador).
+        // Se mantiene el modo Nota: la ruta combina la nueva nota con el acta en
+        // progreso, asi que el usuario puede seguir dictando lo que falte (o
+        // corregir un dato) sin perder ni duplicar lo ya capturado.
         const faltan = result.camposFaltantes;
-        setMode(faltan.length > 0 ? 'paso' : 'nota');
 
         if (tipo === 'entrega_dotacion' && result.entregaDotacion) {
           const entrega = result.entregaDotacion;
@@ -319,7 +323,7 @@ export default function AgenteActasPage() {
                   'agente',
                   `Falta ${entregaCampoLabels[faltan[0] as keyof typeof entregaCampoLabels]}. ${getNextEntregaPrompt(
                     entrega
-                  )} Responda aqui para completarlo (o dicte una nota nueva completa en Nota IA).`
+                  )} Dictelo o escribalo aqui mismo: lo agrego al acta sin perder lo ya capturado.`
                 )
               : createMessage('agente', 'Datos completos. Genere el borrador o envie a firma.'),
           ]);
@@ -335,7 +339,7 @@ export default function AgenteActasPage() {
                   'agente',
                   `Falta ${campoLabels[faltan[0] as keyof typeof campoLabels]}. ${getNextPrompt(
                     result.draft
-                  )} Responda aqui para completarlo (o dicte una nota nueva completa en Nota IA).`
+                  )} Dictelo o escribalo aqui mismo: lo agrego al acta sin perder lo ya capturado.`
                 )
               : createMessage('agente', 'Datos completos. Confirme con el boton de generar borrador.'),
           ]);

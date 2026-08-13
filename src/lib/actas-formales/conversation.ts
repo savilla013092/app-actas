@@ -59,6 +59,16 @@ export const emptyActaEntregaDotacionData: ActaEntregaDotacionData = {
   tallaPantalon: '',
   tallaCamisa: '',
   tallaBota: '',
+  cantidadPantalon: '1',
+  cantidadCamisa: '1',
+  cantidadBota: '1',
+};
+
+/** Cantidad por defecto: 1 cuando la nota no la menciona. */
+export const normalizarCantidad = (value?: string) => {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  const parsed = Number.parseInt(digits, 10);
+  return Number.isFinite(parsed) && parsed > 0 ? String(parsed) : '1';
 };
 
 const ENTREGA_FIELD_ORDER: CampoActaEntregaDotacion[] = [
@@ -340,6 +350,13 @@ export function applyEntregaFieldAnswer(
 }
 
 export function buildEntregaDraft(data: ActaEntregaDotacionData): ActaFormalDraft {
+  const normalizada: ActaEntregaDotacionData = {
+    ...data,
+    cantidadPantalon: normalizarCantidad(data.cantidadPantalon),
+    cantidadCamisa: normalizarCantidad(data.cantidadCamisa),
+    cantidadBota: normalizarCantidad(data.cantidadBota),
+  };
+
   return {
     tipoFormato: 'entrega_dotacion',
     fecha: data.fecha,
@@ -360,7 +377,7 @@ export function buildEntregaDraft(data: ActaEntregaDotacionData): ActaFormalDraf
     ],
     conclusiones: ['La dotacion queda recibida por el funcionario y sujeta a las condiciones del formato oficial.'],
     compromisos: [],
-    entregaDotacion: data,
+    entregaDotacion: normalizada,
   };
 }
 
@@ -369,8 +386,8 @@ export function buildEntregaSummary(data: ActaEntregaDotacionData) {
     `Fecha: ${data.fecha || 'pendiente'}`,
     `Recibe/Firma: ${data.receptorNombre || 'pendiente'}`,
     `Documento: ${data.receptorDocumento || 'pendiente'}`,
-    `Pantalon: ${data.tallaPantalon || 'pendiente'}`,
-    `Camisa: ${data.tallaCamisa || 'pendiente'}`,
-    `Bota: ${data.tallaBota || 'pendiente'}`,
+    `Pantalon: ${data.tallaPantalon || 'pendiente'} (cantidad ${normalizarCantidad(data.cantidadPantalon)})`,
+    `Camisa: ${data.tallaCamisa || 'pendiente'} (cantidad ${normalizarCantidad(data.cantidadCamisa)})`,
+    `Bota: ${data.tallaBota || 'pendiente'} (cantidad ${normalizarCantidad(data.cantidadBota)})`,
   ].join('\n');
 }

@@ -7,6 +7,7 @@ import {
   emptyActaFormalDraft,
   getMissingEntregaFields,
   getMissingFields,
+  normalizarCantidad,
 } from '@/lib/actas-formales/conversation';
 import {
   buscarTercerosPorNombre,
@@ -66,6 +67,9 @@ const responseSchema = {
     tallaPantalon: { type: Type.STRING },
     tallaCamisa: { type: Type.STRING },
     tallaBota: { type: Type.STRING },
+    cantidadPantalon: { type: Type.STRING },
+    cantidadCamisa: { type: Type.STRING },
+    cantidadBota: { type: Type.STRING },
   },
   required: [
     'tipoDetectado',
@@ -84,6 +88,9 @@ const responseSchema = {
     'tallaPantalon',
     'tallaCamisa',
     'tallaBota',
+    'cantidadPantalon',
+    'cantidadCamisa',
+    'cantidadBota',
   ],
 };
 
@@ -106,11 +113,17 @@ const extraccionSchema = z.object({
   tallaPantalon: z.string(),
   tallaCamisa: z.string(),
   tallaBota: z.string(),
+  cantidadPantalon: z.string(),
+  cantidadCamisa: z.string(),
+  cantidadBota: z.string(),
 });
 
 type ExtraccionModelo = z.infer<typeof extraccionSchema>;
 
-const buildSystemPrompt = (formato: FormatoSolicitadoExtraccion) => {
+const buildSystemPrompt = (
+  formato: FormatoSolicitadoExtraccion,
+  previo?: Record<string, unknown> | null
+) => {
   const hoy = new Date().toISOString().slice(0, 10);
   const instruccionTipo =
     formato === 'entrega_dotacion'
@@ -128,44 +141,91 @@ const buildSystemPrompt = (formato: FormatoSolicitadoExtraccion) => {
     '- Para entrega_dotacion llena fecha, receptorNombre (en MAYUSCULAS), receptorDocumento (solo digitos si se menciona), tallaPantalon, tallaCamisa, tallaBota. Deja vacios los campos de reunion.',
     '- Para general llena fecha, hora, lugar, tipoReunion, objetivo, asistentes (nombre y cargo), ordenDia, desarrollo, conclusiones y compromisos (descripcion, responsable, fechaLimite). Deja vacios receptor y tallas.',
     '- No inventes datos que no esten en la nota. Si el documento de identidad no se menciona, deja receptorDocumento vacio: se buscara automaticamente en el catalogo de terceros.',
+    '- Cantidades: si la nota indica cuantas unidades ("dos pantalones", "2 camisas"), escribe solo el numero en cantidadPantalon, cantidadCamisa o cantidadBota. Si no lo menciona, deja "1".',
+    ...(previo
+      ? [
+          '',
+          'ACTUALIZACION: ya existe un acta en progreso con estos datos:',
+          JSON.stringify(previo),
+          'La nueva nota COMPLETA O CORRIGE esa acta. Devuelve el acta COMPLETA resultante:',
+          '- Conserva tal cual los datos previos que la nueva nota no menciona.',
+          '- Reemplaza unicamente los datos que la nueva nota vuelve a mencionar (el valor nuevo manda).',
+          '- Nunca dupliques ni acumules texto repetido: cada dato debe aparecer una sola vez.',
+          '- Si la nota repite algo con distinto valor, usa el ultimo valor indicado.',
+        ]
+      : []),
   ].join('\n');
 };
 
-const toEntregaData = (parsed: ExtraccionModelo): ActaEntregaDotacionData => ({
-  fecha: parsed.fecha.trim(),
-  receptorNombre: parsed.receptorNombre.trim().toUpperCase(),
-  receptorDocumento: parsed.receptorDocumento.trim(),
-  tallaPantalon: parsed.tallaPantalon.trim(),
-  tallaCamisa: parsed.tallaCamisa.trim(),
-  tallaBota: parsed.tallaBota.trim(),
+/** Conserva el valor previo cuando el modelo devuelve el campo vacio. */
+const preferir = (nuevo: string, previo?: string) => {
+  const limpio = (nuevo || '').trim();
+  return limpio || (previo || '').trim();
+};
+
+const toEntregaData = (
+  parsed: ExtraccionModelo,
+  previo?: ActaEntregaDotacionData | null
+): ActaEntregaDotacionData => ({
+  fecha: preferir(parsed.fecha, previo?.fecha),
+  receptorNombre: preferir(parsed.receptorNombre, previo?.receptorNombre).toUpperCase(),
+  receptorDocumento: preferir(parsed.receptorDocumento, previo?.receptorDocumento),
+  tallaPantalon: preferir(parsed.tallaPantalon, previo?.tallaPantalon),
+  tallaCamisa: preferir(parsed.tallaCamisa, previo?.tallaCamisa),
+  tallaBota: preferir(parsed.tallaBota, previo?.tallaBota),
+  cantidadPantalon: normalizarCantidad(preferir(parsed.cantidadPantalon, previo?.cantidadPantalon)),
+  cantidadCamisa: normalizarCantidad(preferir(parsed.cantidadCamisa, previo?.cantidadCamisa)),
+  cantidadBota: normalizarCantidad(preferir(parsed.cantidadBota, previo?.cantidadBota)),
 });
 
-const toGeneralDraft = (parsed: ExtraccionModelo): ActaFormalDraft => ({
+/** Conserva la lista previa cuando el modelo devuelve un arreglo vacio. */
+const preferirLista = <T,>(nueva: T[], previa?: T[]) =>
+  nueva.length > 0 ? nueva : previa && previa.length > 0 ? previa : [];
+
+const toGeneralDraft = (
+  parsed: ExtraccionModelo,
+  previo?: ActaFormalDraft | null
+): ActaFormalDraft => ({
   ...emptyActaFormalDraft,
   tipoFormato: 'general',
-  fecha: parsed.fecha.trim(),
-  hora: parsed.hora.trim(),
-  lugar: parsed.lugar.trim(),
-  tipoReunion: parsed.tipoReunion.trim(),
-  objetivo: parsed.objetivo.trim(),
-  asistentes: parsed.asistentes
-    .filter((a) => a.nombre.trim())
-    .map((a, index) => ({
-      id: `asistente-ia-${index}-${Date.now()}`,
-      nombre: a.nombre.trim(),
-      cargo: a.cargo.trim() || 'Sin cargo indicado',
-    })),
-  ordenDia: parsed.ordenDia.map((item) => item.trim()).filter(Boolean),
-  desarrollo: parsed.desarrollo.map((item) => item.trim()).filter(Boolean),
-  conclusiones: parsed.conclusiones.map((item) => item.trim()).filter(Boolean),
-  compromisos: parsed.compromisos
-    .filter((c) => c.descripcion.trim())
-    .map((c, index) => ({
-      id: `compromiso-ia-${index}-${Date.now()}`,
-      descripcion: c.descripcion.trim(),
-      responsable: c.responsable.trim() || 'Por definir',
-      fechaLimite: c.fechaLimite.trim() || 'Por definir',
-    })),
+  fecha: preferir(parsed.fecha, previo?.fecha),
+  hora: preferir(parsed.hora, previo?.hora),
+  lugar: preferir(parsed.lugar, previo?.lugar),
+  tipoReunion: preferir(parsed.tipoReunion, previo?.tipoReunion),
+  objetivo: preferir(parsed.objetivo, previo?.objetivo),
+  asistentes: preferirLista(
+    parsed.asistentes
+      .filter((a) => a.nombre.trim())
+      .map((a, index) => ({
+        id: `asistente-ia-${index}-${Date.now()}`,
+        nombre: a.nombre.trim(),
+        cargo: a.cargo.trim() || 'Sin cargo indicado',
+      })),
+    previo?.asistentes
+  ),
+  ordenDia: preferirLista(
+    parsed.ordenDia.map((item) => item.trim()).filter(Boolean),
+    previo?.ordenDia
+  ),
+  desarrollo: preferirLista(
+    parsed.desarrollo.map((item) => item.trim()).filter(Boolean),
+    previo?.desarrollo
+  ),
+  conclusiones: preferirLista(
+    parsed.conclusiones.map((item) => item.trim()).filter(Boolean),
+    previo?.conclusiones
+  ),
+  compromisos: preferirLista(
+    parsed.compromisos
+      .filter((c) => c.descripcion.trim())
+      .map((c, index) => ({
+        id: `compromiso-ia-${index}-${Date.now()}`,
+        descripcion: c.descripcion.trim(),
+        responsable: c.responsable.trim() || 'Por definir',
+        fechaLimite: c.fechaLimite.trim() || 'Por definir',
+      })),
+    previo?.compromisos
+  ),
 });
 
 export async function POST(request: NextRequest) {
@@ -187,7 +247,12 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'Sesion invalida' }, { status: 401 });
   }
 
-  let body: { nota?: string; formato?: FormatoSolicitadoExtraccion };
+  let body: {
+    nota?: string;
+    formato?: FormatoSolicitadoExtraccion;
+    entregaActual?: ActaEntregaDotacionData | null;
+    draftActual?: ActaFormalDraft | null;
+  };
   try {
     body = await request.json();
   } catch {
@@ -200,6 +265,54 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: 'La nota es demasiado corta.' }, { status: 400 });
   }
 
+  // Contexto de la acta en progreso: permite que una segunda nota complete o
+  // corrija la anterior en vez de reinterpretarla desde cero (y duplicar datos).
+  const entregaPrevia = body.entregaActual || null;
+  const draftPrevio = body.draftActual || null;
+  const entregaTieneDatos = Boolean(
+    entregaPrevia &&
+      (entregaPrevia.receptorNombre || entregaPrevia.tallaPantalon || entregaPrevia.tallaCamisa ||
+        entregaPrevia.tallaBota || entregaPrevia.fecha)
+  );
+  const draftTieneDatos = Boolean(
+    draftPrevio &&
+      (draftPrevio.tipoReunion || draftPrevio.objetivo || draftPrevio.fecha ||
+        (draftPrevio.asistentes && draftPrevio.asistentes.length > 0))
+  );
+
+  const previoParaPrompt = entregaTieneDatos
+    ? {
+        tipoDetectado: 'entrega_dotacion',
+        fecha: entregaPrevia?.fecha,
+        receptorNombre: entregaPrevia?.receptorNombre,
+        receptorDocumento: entregaPrevia?.receptorDocumento,
+        tallaPantalon: entregaPrevia?.tallaPantalon,
+        tallaCamisa: entregaPrevia?.tallaCamisa,
+        tallaBota: entregaPrevia?.tallaBota,
+        cantidadPantalon: entregaPrevia?.cantidadPantalon,
+        cantidadCamisa: entregaPrevia?.cantidadCamisa,
+        cantidadBota: entregaPrevia?.cantidadBota,
+      }
+    : draftTieneDatos
+    ? {
+        tipoDetectado: 'general',
+        fecha: draftPrevio?.fecha,
+        hora: draftPrevio?.hora,
+        lugar: draftPrevio?.lugar,
+        tipoReunion: draftPrevio?.tipoReunion,
+        objetivo: draftPrevio?.objetivo,
+        asistentes: draftPrevio?.asistentes?.map((a) => ({ nombre: a.nombre, cargo: a.cargo })),
+        ordenDia: draftPrevio?.ordenDia,
+        desarrollo: draftPrevio?.desarrollo,
+        conclusiones: draftPrevio?.conclusiones,
+        compromisos: draftPrevio?.compromisos?.map((c) => ({
+          descripcion: c.descripcion,
+          responsable: c.responsable,
+          fechaLimite: c.fechaLimite,
+        })),
+      }
+    : null;
+
   const modelo = process.env.GEMINI_MODEL?.trim() || DEFAULT_MODEL;
   const ai = new GoogleGenAI({ apiKey });
 
@@ -209,7 +322,7 @@ export async function POST(request: NextRequest) {
       model: modelo,
       contents: nota,
       config: {
-        systemInstruction: buildSystemPrompt(formato),
+        systemInstruction: buildSystemPrompt(formato, previoParaPrompt),
         responseMimeType: 'application/json',
         responseSchema,
         temperature: 0,
@@ -239,7 +352,7 @@ export async function POST(request: NextRequest) {
   const tipoDetectado = parsed.tipoDetectado;
 
   if (tipoDetectado === 'entrega_dotacion') {
-    const entregaData = toEntregaData(parsed);
+    const entregaData = toEntregaData(parsed, entregaTieneDatos ? entregaPrevia : null);
     let terceroSugerido = null;
 
     if (!entregaData.receptorDocumento && entregaData.receptorNombre.length >= 3) {
@@ -267,7 +380,7 @@ export async function POST(request: NextRequest) {
     });
   }
 
-  const draft = toGeneralDraft(parsed);
+  const draft = toGeneralDraft(parsed, draftTieneDatos ? draftPrevio : null);
   return NextResponse.json({
     disponible: true,
     ok: true,
