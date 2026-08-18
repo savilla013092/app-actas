@@ -1,5 +1,11 @@
-import { normalizarCantidad } from '@/lib/actas-formales/conversation';
-import { ActaEntregaDotacionData, ActaFormal, ActaFormalDraft, FirmanteActaFormal } from '@/types/actaFormal';
+import { getItemsEntregaIncluidos, normalizarCantidad } from '@/lib/actas-formales/conversation';
+import {
+  ActaEntregaDotacionData,
+  ActaFormal,
+  ActaFormalDraft,
+  FirmanteActaFormal,
+  ItemDotacion,
+} from '@/types/actaFormal';
 
 const HEADER_PATH = '/actas-formales/header-serviciudad.png';
 const FOOTER_PATH = '/actas-formales/footer-serviciudad.png';
@@ -640,13 +646,47 @@ function buildEntregaReceiverSignatureRun(firmante?: FirmanteActaFormal) {
   return '';
 }
 
+interface FilaEntrega {
+  item: ItemDotacion;
+  cantidad: string;
+  descripcion: string;
+}
+
+/**
+ * Filas que realmente van en el acta. Un elemento sin talla (o marcado como no
+ * entregado) se omite, de modo que se pueden generar actas de solo botas, solo
+ * camisa, solo pantalon o cualquier combinacion.
+ */
+function buildFilasEntrega(data: ActaEntregaDotacionData): FilaEntrega[] {
+  const incluidos = getItemsEntregaIncluidos(data);
+  const descripciones: Record<ItemDotacion, string> = {
+    pantalon: `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`,
+    camisa: `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`,
+    bota: `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`,
+  };
+  const cantidades: Record<ItemDotacion, string | undefined> = {
+    pantalon: data.cantidadPantalon,
+    camisa: data.cantidadCamisa,
+    bota: data.cantidadBota,
+  };
+
+  return incluidos.map((item) => ({
+    item,
+    cantidad: normalizarCantidad(cantidades[item]),
+    descripcion: descripciones[item],
+  }));
+}
+
 /**
  * Ajusta la tabla de dotacion de la plantilla en tiempo de ejecucion:
  * 1) quita la columna "IMAGEN" (y la imagen que contiene) para dejar una tabla
  *    limpia (No | CANTIDADES | DESCRIPCION);
- * 2) escribe la cantidad real de cada item en la columna de cantidades.
+ * 2) elimina las filas de los elementos que no hacen parte de esta entrega;
+ * 3) escribe consecutivo y cantidad real de cada item que si se entrega.
  */
-function ajustarTablaEntrega(documentXml: string, cantidades: string[]): string {
+const ORDEN_ITEMS_PLANTILLA: ItemDotacion[] = ['pantalon', 'camisa', 'bota'];
+
+function ajustarTablaEntrega(documentXml: string, filas: FilaEntrega[]): string {
   const tablaMatch = documentXml.match(/<w:tbl>[\s\S]*?<\/w:tbl>/);
   if (!tablaMatch) return documentXml;
 
@@ -660,7 +700,11 @@ function ajustarTablaEntrega(documentXml: string, cantidades: string[]): string 
     }
   }
 
+  const setCeldaTexto = (celda: string, valor: string) =>
+    celda.replace(/(<w:t(?:\s[^>]*)?>)[^<]*(<\/w:t>)/, `$1${xmlEscape(valor)}$2`);
+
   let filaIndex = -1;
+  let consecutivo = 0;
   tabla = tabla.replace(/<w:tr\b[\s\S]*?<\/w:tr>/g, (fila) => {
     filaIndex += 1;
 
@@ -669,19 +713,21 @@ function ajustarTablaEntrega(documentXml: string, cantidades: string[]): string 
 
     // 1) Quitar la celda de la columna IMAGEN.
     let nuevaFila = fila.replace(celdas[1], '');
+    if (filaIndex === 0) return nuevaFila;
 
-    // 2) En las filas de datos, fijar la cantidad (ahora es la celda indice 1).
-    const cantidad = cantidades[filaIndex - 1];
-    if (filaIndex > 0 && cantidad) {
-      const celdasRestantes = nuevaFila.match(/<w:tc>[\s\S]*?<\/w:tc>/g);
-      const celdaCantidad = celdasRestantes?.[1];
-      if (celdaCantidad) {
-        const celdaActualizada = celdaCantidad.replace(
-          /(<w:t(?:\s[^>]*)?>)[^<]*(<\/w:t>)/,
-          `$1${xmlEscape(cantidad)}$2`
-        );
-        nuevaFila = nuevaFila.replace(celdaCantidad, celdaActualizada);
-      }
+    // 2) Suprimir la fila cuando ese elemento no hace parte de la entrega.
+    const itemPlantilla = ORDEN_ITEMS_PLANTILLA[filaIndex - 1];
+    const datosFila = filas.find((item) => item.item === itemPlantilla);
+    if (!datosFila) return '';
+
+    // 3) Renumerar y fijar la cantidad real (celdas 0 y 1 tras quitar IMAGEN).
+    consecutivo += 1;
+    const celdasRestantes = nuevaFila.match(/<w:tc>[\s\S]*?<\/w:tc>/g) || [];
+    if (celdasRestantes[0]) {
+      nuevaFila = nuevaFila.replace(celdasRestantes[0], setCeldaTexto(celdasRestantes[0], String(consecutivo)));
+    }
+    if (celdasRestantes[1]) {
+      nuevaFila = nuevaFila.replace(celdasRestantes[1], setCeldaTexto(celdasRestantes[1], datosFila.cantidad));
     }
 
     return nuevaFila;
@@ -715,7 +761,19 @@ export async function generarActaEntregaDotacionDocx({
   const mesAnio = formatEntregaMonthYear(data.fecha);
   const semestre = formatEntregaSemester(data.fecha);
 
+  const filas = buildFilasEntrega(data);
+  const incluyeBota = filas.some((fila) => fila.item === 'bota');
+
   let documentXml = await documentFile.async('string');
+
+  // La garantia solo aplica al calzado: si no se entregan botas, se retira.
+  if (!incluyeBota) {
+    documentXml = documentXml.replace(
+      /<w:p [^>]*>(?:(?!<\/w:p>)[\s\S])*?Nota: La bota tiene una garant[\s\S]*?<\/w:p>/,
+      ''
+    );
+  }
+
   documentXml = documentXml
     .replace(/Dosquebradas, mayo de 2026/g, `Dosquebradas, ${xmlEscape(fechaCompleta)}`)
     .replace(/PANTALON TALLA 36/g, `PANTALON TALLA ${xmlEscape(data.tallaPantalon.toUpperCase())}`)
@@ -767,11 +825,7 @@ export async function generarActaEntregaDotacionDocx({
     }
   }
 
-  documentXml = ajustarTablaEntrega(documentXml, [
-    normalizarCantidad(data.cantidadPantalon),
-    normalizarCantidad(data.cantidadCamisa),
-    normalizarCantidad(data.cantidadBota),
-  ]);
+  documentXml = ajustarTablaEntrega(documentXml, filas);
 
   zip.file('word/document.xml', documentXml);
   const blob = await zip.generateAsync({
@@ -804,6 +858,8 @@ export async function generarActaEntregaDotacionPdf({
   const receptorNombre = data.receptorNombre.toUpperCase();
   const receptorDocumento = data.receptorDocumento.trim();
   const firmante = firmantes.find((item) => item.estado === 'firmada');
+  const filas = buildFilasEntrega(data);
+  const incluyeBota = filas.some((fila) => fila.item === 'bota');
   let y = 130;
 
   doc.addImage(headerDataUrl, 'PNG', 38, 22, 536, 94, undefined, 'FAST');
@@ -825,15 +881,7 @@ export async function generarActaEntregaDotacionPdf({
     styles: { font: 'helvetica', fontSize: 10, lineColor: [0, 0, 0], lineWidth: 0.4, cellPadding: 6 },
     head: [['No', 'CANTIDAD', 'DESCRIPCION']],
     headStyles: { fillColor: [255, 255, 255], textColor: [0, 0, 0], fontStyle: 'bold', halign: 'center' },
-    body: [
-      ['1', normalizarCantidad(data.cantidadPantalon), `PANTALON TALLA ${data.tallaPantalon.toUpperCase()}`],
-      ['2', normalizarCantidad(data.cantidadCamisa), `CAMISA TALLA ${data.tallaCamisa.toUpperCase()}`],
-      [
-        '3',
-        normalizarCantidad(data.cantidadBota),
-        `CALZADO TALLA ${data.tallaBota.toUpperCase()} ${formatEntregaSemester(data.fecha)}`,
-      ],
-    ],
+    body: filas.map((fila, index) => [String(index + 1), fila.cantidad, fila.descripcion]),
     columnStyles: {
       0: { halign: 'center', cellWidth: 40 },
       1: { halign: 'center', cellWidth: 90 },
@@ -850,7 +898,14 @@ export async function generarActaEntregaDotacionPdf({
   const body = [
     `Se hace entrega Al funcionario ${receptorNombre} identificado con C.C ${receptorDocumento} del elemento que se relaciona en el cuadro anterior y en las mismas condiciones debera ser devuelto al Almacen de SERVICIUDAD, salvo el deterioro normal por su uso.`,
     'Si se presenta desperfecto por manejo inapropiado dentro del uso normal, perdida, hurto o dano sera responsabilidad de quien lo recibe.',
-    `Nota: La bota tiene una garantia de cuatro (3) meses a partir de ${formatEntregaMonthYear(data.fecha)}; despues de este periodo no se aceptan reclamos ni devoluciones`,
+    // La garantia solo aplica al calzado.
+    ...(incluyeBota
+      ? [
+          `Nota: La bota tiene una garantia de cuatro (3) meses a partir de ${formatEntregaMonthYear(
+            data.fecha
+          )}; despues de este periodo no se aceptan reclamos ni devoluciones`,
+        ]
+      : []),
     'Recibida la dotacion se tiene 15 dias calendario para realizar cualquier reclamo',
     'En caso de cambio de destino o funcionario de estos elementos, debera ser notificado por escrito al area de talento humano por la persona a cargo del mismo.',
   ];

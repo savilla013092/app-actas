@@ -96,7 +96,7 @@ data/                         # git-ignored (fuentes .xlsx y documentos de refer
 
 Página cliente que arma dos tipos de acta:
 - **Formal** (`tipoFormato: 'general'`): fecha, hora, lugar, tipo de reunión, asistentes, objetivo, orden del día, desarrollo, conclusiones, compromisos.
-- **Entrega de dotación** (`tipoFormato: 'entrega_dotacion'`): formato **preconfigurado** (lugar, objetivo y textos fijos en `buildEntregaDraft`); solo pide fecha, receptor, documento y tallas.
+- **Entrega de dotación** (`tipoFormato: 'entrega_dotacion'`): formato **preconfigurado** (lugar, objetivo y textos fijos en `buildEntregaDraft`); solo pide fecha, receptor, documento y tallas. Los elementos (pantalón, camisa, bota) son **opcionales e independientes**: basta con uno. Un elemento sin talla —o respondido con "no aplica" en el modo paso a paso— se registra en `itemsOmitidos`, no bloquea la firma y desaparece de la tabla del Word/PDF (las filas se renumeran y la nota de garantía de la bota solo aparece si se entrega calzado).
 
 Tres modos de captura (`src/app/agente-actas/page.tsx`):
 - **Nota IA** (por defecto): se dicta/pega una sola nota; `POST /api/actas/extraer` la interpreta con Gemini (`generateContent` + `responseSchema` JSON, validado con Zod) y rellena el borrador. Reusa `tercerosLookup` para resolver la cédula por nombre.

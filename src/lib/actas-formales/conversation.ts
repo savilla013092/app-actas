@@ -3,6 +3,7 @@ import {
   ActaFormalDraft,
   AsistenteActaFormal,
   CompromisoActaFormal,
+  ItemDotacion,
 } from '@/types/actaFormal';
 
 export type CampoActaFormal =
@@ -62,7 +63,46 @@ export const emptyActaEntregaDotacionData: ActaEntregaDotacionData = {
   cantidadPantalon: '1',
   cantidadCamisa: '1',
   cantidadBota: '1',
+  itemsOmitidos: [],
 };
+
+export const ITEMS_DOTACION: ItemDotacion[] = ['pantalon', 'camisa', 'bota'];
+
+export const itemDotacionLabels: Record<ItemDotacion, string> = {
+  pantalon: 'pantalon',
+  camisa: 'camisa',
+  bota: 'bota o calzado',
+};
+
+export const TALLA_FIELD_BY_ITEM: Record<ItemDotacion, CampoActaEntregaDotacion> = {
+  pantalon: 'tallaPantalon',
+  camisa: 'tallaCamisa',
+  bota: 'tallaBota',
+};
+
+export const ITEM_BY_TALLA_FIELD: Partial<Record<CampoActaEntregaDotacion, ItemDotacion>> = {
+  tallaPantalon: 'pantalon',
+  tallaCamisa: 'camisa',
+  tallaBota: 'bota',
+};
+
+/** Respuestas que marcan un elemento como no entregado ("no aplica", "-", ...). */
+const OMISION_PATTERN =
+  /^(no|no aplica|na|n\/a|ninguna|ninguno|nada|omitir|omitido|sin|sin talla|no lleva|no entrega|no se entrega|-{1,2})\.?$/i;
+
+export const esRespuestaOmision = (value: string) => OMISION_PATTERN.test(value.trim());
+
+const omitidosDe = (data: ActaEntregaDotacionData): ItemDotacion[] =>
+  (data.itemsOmitidos || []).filter((item) => ITEMS_DOTACION.includes(item));
+
+export const esItemOmitido = (data: ActaEntregaDotacionData, item: ItemDotacion) =>
+  omitidosDe(data).includes(item);
+
+/** Elementos que si hacen parte de la entrega (tienen talla y no fueron omitidos). */
+export const getItemsEntregaIncluidos = (data: ActaEntregaDotacionData): ItemDotacion[] =>
+  ITEMS_DOTACION.filter(
+    (item) => !esItemOmitido(data, item) && Boolean(String(data[TALLA_FIELD_BY_ITEM[item]] || '').trim())
+  );
 
 /** Cantidad por defecto: 1 cuando la nota no la menciona. */
 export const normalizarCantidad = (value?: string) => {
@@ -94,9 +134,9 @@ export const entregaCampoPrompts: Record<CampoActaEntregaDotacion, string> = {
   receptorNombre:
     'Indique el nombre completo de la persona que recibe y firma. Buscare la identificacion en terceros automaticamente.',
   receptorDocumento: 'Indique la cedula o documento de la persona que recibe.',
-  tallaPantalon: 'Indique la talla del pantalon.',
-  tallaCamisa: 'Indique la talla de la camisa.',
-  tallaBota: 'Indique la talla de la bota o calzado.',
+  tallaPantalon: 'Indique la talla del pantalon. Si esta entrega no incluye pantalon, escriba "no aplica".',
+  tallaCamisa: 'Indique la talla de la camisa. Si esta entrega no incluye camisa, escriba "no aplica".',
+  tallaBota: 'Indique la talla de la bota o calzado. Si esta entrega no incluye botas, escriba "no aplica".',
 };
 
 export const campoLabels: Record<CampoActaFormal, string> = {
@@ -323,11 +363,32 @@ export function buildDraftSummary(draft: ActaFormalDraft) {
 }
 
 export function getMissingEntregaFields(data: ActaEntregaDotacionData): CampoActaEntregaDotacion[] {
-  return ENTREGA_FIELD_ORDER.filter((field) => !String(data[field] || '').trim());
+  const faltantes = ENTREGA_FIELD_ORDER.filter((field) => {
+    if (String(data[field] || '').trim()) return false;
+
+    // Una talla omitida a proposito no es un dato pendiente: el acta puede ser
+    // de un solo elemento (solo botas, solo camisa, solo pantalon...).
+    const item = ITEM_BY_TALLA_FIELD[field];
+    return !item || !esItemOmitido(data, item);
+  });
+
+  // Pero al menos un elemento debe quedar en el acta.
+  if (getItemsEntregaIncluidos(data).length === 0) {
+    return [
+      ...faltantes.filter((field) => !ITEM_BY_TALLA_FIELD[field]),
+      ...ITEMS_DOTACION.map((item) => TALLA_FIELD_BY_ITEM[item]),
+    ];
+  }
+
+  return faltantes;
 }
 
 export function getNextEntregaPrompt(data: ActaEntregaDotacionData) {
   const [nextField] = getMissingEntregaFields(data);
+  if (nextField && ITEM_BY_TALLA_FIELD[nextField] && getItemsEntregaIncluidos(data).length === 0) {
+    return 'El acta debe incluir al menos un elemento. Indique la talla de pantalon, camisa o bota (escriba "no aplica" en los que no entregue).';
+  }
+
   if (!nextField) {
     return 'Ya tengo los datos del acta de entrega. Puede generar el borrador y enviarlo a firma.';
   }
@@ -343,18 +404,33 @@ export function applyEntregaFieldAnswer(
   const value = answer.trim();
   if (!value) return data;
 
+  const item = ITEM_BY_TALLA_FIELD[field];
+
+  if (item && esRespuestaOmision(value)) {
+    return {
+      ...data,
+      [field]: '',
+      itemsOmitidos: [...omitidosDe(data).filter((omitido) => omitido !== item), item],
+    };
+  }
+
   return {
     ...data,
     [field]: field === 'receptorNombre' ? value.toUpperCase() : value,
+    // Volver a indicar una talla reincorpora el elemento a la entrega.
+    ...(item ? { itemsOmitidos: omitidosDe(data).filter((omitido) => omitido !== item) } : {}),
   };
 }
 
 export function buildEntregaDraft(data: ActaEntregaDotacionData): ActaFormalDraft {
+  const incluidos = getItemsEntregaIncluidos(data);
+  const detalleItems = incluidos.map((item) => itemDotacionLabels[item]).join(', ');
   const normalizada: ActaEntregaDotacionData = {
     ...data,
     cantidadPantalon: normalizarCantidad(data.cantidadPantalon),
     cantidadCamisa: normalizarCantidad(data.cantidadCamisa),
     cantidadBota: normalizarCantidad(data.cantidadBota),
+    itemsOmitidos: ITEMS_DOTACION.filter((item) => !incluidos.includes(item)),
   };
 
   return {
@@ -371,7 +447,11 @@ export function buildEntregaDraft(data: ActaEntregaDotacionData): ActaFormalDraf
       },
     ],
     objetivo: 'Formalizar la entrega de dotacion institucional.',
-    ordenDia: ['Entrega de dotacion institucional.'],
+    ordenDia: [
+      detalleItems
+        ? `Entrega de dotacion institucional: ${detalleItems}.`
+        : 'Entrega de dotacion institucional.',
+    ],
     desarrollo: [
       `Se hace entrega de la dotacion al funcionario ${data.receptorNombre.toUpperCase()} identificado con C.C ${data.receptorDocumento}.`,
     ],
@@ -381,13 +461,28 @@ export function buildEntregaDraft(data: ActaEntregaDotacionData): ActaFormalDraf
   };
 }
 
+const ENTREGA_SUMMARY_ROWS: Array<{
+  item: ItemDotacion;
+  label: string;
+  cantidad: 'cantidadPantalon' | 'cantidadCamisa' | 'cantidadBota';
+}> = [
+  { item: 'pantalon', label: 'Pantalon', cantidad: 'cantidadPantalon' },
+  { item: 'camisa', label: 'Camisa', cantidad: 'cantidadCamisa' },
+  { item: 'bota', label: 'Bota', cantidad: 'cantidadBota' },
+];
+
 export function buildEntregaSummary(data: ActaEntregaDotacionData) {
   return [
     `Fecha: ${data.fecha || 'pendiente'}`,
     `Recibe/Firma: ${data.receptorNombre || 'pendiente'}`,
     `Documento: ${data.receptorDocumento || 'pendiente'}`,
-    `Pantalon: ${data.tallaPantalon || 'pendiente'} (cantidad ${normalizarCantidad(data.cantidadPantalon)})`,
-    `Camisa: ${data.tallaCamisa || 'pendiente'} (cantidad ${normalizarCantidad(data.cantidadCamisa)})`,
-    `Bota: ${data.tallaBota || 'pendiente'} (cantidad ${normalizarCantidad(data.cantidadBota)})`,
+    ...ENTREGA_SUMMARY_ROWS.map(({ item, label, cantidad }) => {
+      if (esItemOmitido(data, item)) return `${label}: no se entrega`;
+
+      const talla = String(data[TALLA_FIELD_BY_ITEM[item]] || '').trim();
+      if (!talla) return `${label}: pendiente`;
+
+      return `${label}: ${talla} (cantidad ${normalizarCantidad(data[cantidad])})`;
+    }),
   ].join('\n');
 }

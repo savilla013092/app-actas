@@ -3,6 +3,7 @@ import { GoogleGenAI, Type } from '@google/genai';
 import { z } from 'zod';
 
 import {
+  ITEMS_DOTACION,
   buildEntregaDraft,
   emptyActaFormalDraft,
   getMissingEntregaFields,
@@ -18,6 +19,7 @@ import {
   ActaEntregaDotacionData,
   ActaFormalDraft,
   FormatoSolicitadoExtraccion,
+  ItemDotacion,
 } from '@/types/actaFormal';
 
 export const runtime = 'nodejs';
@@ -70,6 +72,10 @@ const responseSchema = {
     cantidadPantalon: { type: Type.STRING },
     cantidadCamisa: { type: Type.STRING },
     cantidadBota: { type: Type.STRING },
+    itemsEntregados: {
+      type: Type.ARRAY,
+      items: { type: Type.STRING, enum: ['pantalon', 'camisa', 'bota'] },
+    },
   },
   required: [
     'tipoDetectado',
@@ -91,6 +97,7 @@ const responseSchema = {
     'cantidadPantalon',
     'cantidadCamisa',
     'cantidadBota',
+    'itemsEntregados',
   ],
 };
 
@@ -116,6 +123,7 @@ const extraccionSchema = z.object({
   cantidadPantalon: z.string(),
   cantidadCamisa: z.string(),
   cantidadBota: z.string(),
+  itemsEntregados: z.array(z.enum(['pantalon', 'camisa', 'bota'])).default([]),
 });
 
 type ExtraccionModelo = z.infer<typeof extraccionSchema>;
@@ -139,6 +147,7 @@ const buildSystemPrompt = (
     'Reglas:',
     '- Devuelve SIEMPRE todas las propiedades del esquema. Usa cadena vacia "" o arreglos vacios [] para lo que no aplique o no se mencione.',
     '- Para entrega_dotacion llena fecha, receptorNombre (en MAYUSCULAS), receptorDocumento (solo digitos si se menciona), tallaPantalon, tallaCamisa, tallaBota. Deja vacios los campos de reunion.',
+    '- La entrega NO tiene que incluir los tres elementos: puede ser solo botas, solo camisa, solo pantalon o cualquier combinacion. En itemsEntregados lista unicamente los elementos que la nota menciona como entregados y deja vacia la talla de los que no se entregan. Nunca inventes tallas para completar los tres.',
     '- Para general llena fecha, hora, lugar, tipoReunion, objetivo, asistentes (nombre y cargo), ordenDia, desarrollo, conclusiones y compromisos (descripcion, responsable, fechaLimite). Deja vacios receptor y tallas.',
     '- No inventes datos que no esten en la nota. Si el documento de identidad no se menciona, deja receptorDocumento vacio: se buscara automaticamente en el catalogo de terceros.',
     '- Cantidades: si la nota indica cuantas unidades ("dos pantalones", "2 camisas"), escribe solo el numero en cantidadPantalon, cantidadCamisa o cantidadBota. Si no lo menciona, deja "1".',
@@ -163,20 +172,41 @@ const preferir = (nuevo: string, previo?: string) => {
   return limpio || (previo || '').trim();
 };
 
+const TALLA_POR_ITEM: Record<ItemDotacion, keyof ActaEntregaDotacionData> = {
+  pantalon: 'tallaPantalon',
+  camisa: 'tallaCamisa',
+  bota: 'tallaBota',
+};
+
 const toEntregaData = (
   parsed: ExtraccionModelo,
   previo?: ActaEntregaDotacionData | null
-): ActaEntregaDotacionData => ({
-  fecha: preferir(parsed.fecha, previo?.fecha),
-  receptorNombre: preferir(parsed.receptorNombre, previo?.receptorNombre).toUpperCase(),
-  receptorDocumento: preferir(parsed.receptorDocumento, previo?.receptorDocumento),
-  tallaPantalon: preferir(parsed.tallaPantalon, previo?.tallaPantalon),
-  tallaCamisa: preferir(parsed.tallaCamisa, previo?.tallaCamisa),
-  tallaBota: preferir(parsed.tallaBota, previo?.tallaBota),
-  cantidadPantalon: normalizarCantidad(preferir(parsed.cantidadPantalon, previo?.cantidadPantalon)),
-  cantidadCamisa: normalizarCantidad(preferir(parsed.cantidadCamisa, previo?.cantidadCamisa)),
-  cantidadBota: normalizarCantidad(preferir(parsed.cantidadBota, previo?.cantidadBota)),
-});
+): ActaEntregaDotacionData => {
+  const data: ActaEntregaDotacionData = {
+    fecha: preferir(parsed.fecha, previo?.fecha),
+    receptorNombre: preferir(parsed.receptorNombre, previo?.receptorNombre).toUpperCase(),
+    receptorDocumento: preferir(parsed.receptorDocumento, previo?.receptorDocumento),
+    tallaPantalon: preferir(parsed.tallaPantalon, previo?.tallaPantalon),
+    tallaCamisa: preferir(parsed.tallaCamisa, previo?.tallaCamisa),
+    tallaBota: preferir(parsed.tallaBota, previo?.tallaBota),
+    cantidadPantalon: normalizarCantidad(preferir(parsed.cantidadPantalon, previo?.cantidadPantalon)),
+    cantidadCamisa: normalizarCantidad(preferir(parsed.cantidadCamisa, previo?.cantidadCamisa)),
+    cantidadBota: normalizarCantidad(preferir(parsed.cantidadBota, previo?.cantidadBota)),
+  };
+
+  // Un elemento entra al acta si tiene talla o si el modelo lo listo como
+  // entregado; el resto queda omitido para que un acta de solo botas (o solo
+  // camisa, o solo pantalon) se considere completa.
+  const incluidos = new Set<ItemDotacion>(parsed.itemsEntregados);
+  ITEMS_DOTACION.forEach((item) => {
+    if (String(data[TALLA_POR_ITEM[item]] || '').trim()) incluidos.add(item);
+  });
+
+  return {
+    ...data,
+    itemsOmitidos: ITEMS_DOTACION.filter((item) => !incluidos.has(item)),
+  };
+};
 
 /** Conserva la lista previa cuando el modelo devuelve un arreglo vacio. */
 const preferirLista = <T,>(nueva: T[], previa?: T[]) =>
@@ -292,6 +322,9 @@ export async function POST(request: NextRequest) {
         cantidadPantalon: entregaPrevia?.cantidadPantalon,
         cantidadCamisa: entregaPrevia?.cantidadCamisa,
         cantidadBota: entregaPrevia?.cantidadBota,
+        itemsEntregados: ITEMS_DOTACION.filter(
+          (item) => !(entregaPrevia?.itemsOmitidos || []).includes(item)
+        ),
       }
     : draftTieneDatos
     ? {

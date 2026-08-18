@@ -33,6 +33,8 @@ import {
   emptyActaFormalDraft,
   emptyActaEntregaDotacionData,
   entregaCampoLabels,
+  esItemOmitido,
+  ITEM_BY_TALLA_FIELD,
   getMissingFields,
   getMissingEntregaFields,
   getNextPrompt,
@@ -110,7 +112,7 @@ const initialMessages = [
 const initialEntregaMessages = [
   createMessage(
     'agente',
-    'Acta de entrega seleccionada. Dicte o pegue una nota (modo Nota IA) con fecha, persona que recibe y tallas; tambien puede completar paso a paso.'
+    'Acta de entrega seleccionada. Dicte o pegue una nota (modo Nota IA) con fecha, persona que recibe y los elementos entregados; no es necesario entregar los tres: puede ser solo botas, solo camisa o solo pantalon.'
   ),
   createMessage('agente', getNextEntregaPrompt(emptyActaEntregaDotacionData)),
 ];
@@ -722,7 +724,9 @@ export default function AgenteActasPage() {
             }`}
           >
             <p className='text-sm font-bold'>Acta de entrega</p>
-            <p className='mt-1 text-xs text-muted-foreground'>Formato fijo: fecha, receptor, documento y tallas.</p>
+            <p className='mt-1 text-xs text-muted-foreground'>
+              Formato fijo: fecha, receptor, documento y los elementos que se entreguen (uno, dos o los tres).
+            </p>
           </button>
         </div>
       </Card>
@@ -801,7 +805,7 @@ export default function AgenteActasPage() {
                 onChange={(event) => setInput(event.target.value)}
                 placeholder={
                   mode === 'nota'
-                    ? 'Dicte o pegue una sola nota. Ej: "acta de entrega para Juan Perez, cedula 1088..., pantalon 34, camisa M, bota 42". La IA extrae los datos.'
+                    ? 'Dicte o pegue una sola nota. Ej: "acta de entrega para Juan Perez, cedula 1088..., solo botas talla 42". La IA extrae los datos y deja unicamente los elementos que mencione.'
                     : isEntrega
                     ? nextEntregaField
                       ? getNextEntregaPrompt(entregaData)
@@ -865,12 +869,18 @@ export default function AgenteActasPage() {
             <div className='space-y-2'>
               {isEntrega
                 ? Object.entries(entregaCampoLabels).map(([field, label]) => {
-                    const isMissing = entregaMissingFields.includes(field as keyof typeof entregaCampoLabels);
+                    const campo = field as keyof typeof entregaCampoLabels;
+                    const item = ITEM_BY_TALLA_FIELD[campo];
+                    const isOmitido = Boolean(item && esItemOmitido(entregaData, item));
+                    const isMissing = entregaMissingFields.includes(campo);
                     return (
                       <div key={field} className='flex items-center justify-between rounded-md border border-border bg-muted/40 px-3 py-2'>
                         <span className='text-xs font-medium text-foreground'>{label}</span>
-                        <Badge variant={isMissing ? 'pending' : 'success'} size='sm'>
-                          {isMissing ? 'Pendiente' : 'Listo'}
+                        <Badge
+                          variant={isOmitido ? 'secondary' : isMissing ? 'pending' : 'success'}
+                          size='sm'
+                        >
+                          {isOmitido ? 'No se entrega' : isMissing ? 'Pendiente' : 'Listo'}
                         </Badge>
                       </div>
                     );

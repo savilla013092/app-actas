@@ -46,6 +46,9 @@ export interface ActaFormal extends ActaFormalDraft {
   cerradoEn?: Date;
 }
 
+/** Elementos que puede incluir un acta de entrega de dotacion. */
+export type ItemDotacion = 'pantalon' | 'camisa' | 'bota';
+
 export interface ActaEntregaDotacionData {
   fecha: string;
   receptorNombre: string;
@@ -56,6 +59,12 @@ export interface ActaEntregaDotacionData {
   cantidadPantalon?: string;
   cantidadCamisa?: string;
   cantidadBota?: string;
+  /**
+   * Elementos que NO hacen parte de esta entrega. Permite generar actas de solo
+   * botas, solo camisa, solo pantalon o cualquier combinacion: el item omitido
+   * no se pide, no aparece en la tabla del documento y no bloquea la firma.
+   */
+  itemsOmitidos?: ItemDotacion[];
 }
 
 export interface FirmanteActaFormal {
